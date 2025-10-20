@@ -153,36 +153,55 @@ def perform_full_sync():
     return result
 
 
-def run_continuous_sync():
-    """Run continuous sync loop."""
+def run_single_sync_and_restart():
+    """Run a single sync cycle and then restart the server."""
     global is_sync_running, last_sync_time, last_sync_result, sync_error, sync_count
     
-    while True:
-        if is_sync_running:
-            time.sleep(1)
-            continue
+    is_sync_running = True
+    sync_count += 1
+    
+    try:
+        print(f"\n{'='*80}")
+        print(f"Starting sync #{sync_count} at {datetime.now().isoformat()}")
+        print(f"{'='*80}\n")
         
-        is_sync_running = True
-        sync_count += 1
+        result = perform_full_sync()
+        last_sync_result = result
+        last_sync_time = datetime.now()
+        sync_error = None
         
-        try:
-            result = perform_full_sync()
-            last_sync_result = result
-            last_sync_time = datetime.now()
-            sync_error = None
-            
-            # Wait before next sync
-            print(f"Waiting 60 seconds before next sync...\n")
-            time.sleep(60)
-            
-        except Exception as error:
-            sync_error = str(error)
-            print(f"❌ Sync #{sync_count} failed: {error}")
-            print(f"Retrying in 30 seconds...\n")
-            time.sleep(30)
+        print(f"\n{'='*80}")
+        print(f"Sync #{sync_count} completed successfully!")
+        print(f"Waiting 60 seconds before restart to prevent zombie accumulation...")
+        print(f"{'='*80}\n")
         
-        finally:
-            is_sync_running = False
+        # Clean up before restart
+        cleanup_all_zombies()
+        
+        # Wait before restart to prevent rapid cycling
+        time.sleep(60)
+        
+        print(f"Restarting server...")
+        # Restart the server
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+        
+    except Exception as error:
+        sync_error = str(error)
+        print(f"❌ Sync #{sync_count} failed: {error}")
+        print(f"Waiting 30 seconds before restart to prevent zombie accumulation...")
+        
+        # Clean up before restart even on error
+        cleanup_all_zombies()
+        
+        # Wait before restart to prevent rapid cycling
+        time.sleep(30)
+        
+        print(f"Restarting server...")
+        # Restart the server
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    
+    finally:
+        is_sync_running = False
 
 
 # Routes
@@ -257,17 +276,12 @@ if __name__ == '__main__':
     # Register cleanup on exit
     atexit.register(cleanup_all_zombies)
     
-    # Start continuous sync in background thread
-    sync_thread = threading.Thread(target=run_continuous_sync, daemon=True)
+    # Start single sync cycle in background thread (will restart after completion)
+    sync_thread = threading.Thread(target=run_single_sync_and_restart, daemon=True)
     sync_thread.start()
     
-    # Start periodic cleanup thread
-    cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
-    cleanup_thread.start()
-    
     print(f"Starting gitSync server on port {PORT}")
-    print(f"Continuous sync enabled")
-    print(f"Periodic zombie cleanup enabled (every 30s)")
+    print(f"Single sync cycle enabled (will restart after completion)")
     print(f"Signal handlers registered for graceful shutdown")
     
     # Initial cleanup
