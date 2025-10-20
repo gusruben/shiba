@@ -21,20 +21,48 @@ AIRTABLE_API_BASE = 'https://api.airtable.com/v0'
 
 
 def cleanup_git_processes():
-    """Clean up any hanging git processes."""
+    """Clean up any hanging git processes and zombies."""
     try:
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        zombies_cleaned = 0
+        git_procs_cleaned = 0
+        
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'status', 'create_time']):
             try:
-                if proc.info['name'] == 'git' and proc.info['cmdline']:
-                    # Check if it's a git process that's been running too long
-                    if proc.create_time() < (datetime.now().timestamp() - 600):  # 10 minutes
-                        print(f"  Terminating hanging git process: {proc.info['pid']}")
+                proc_info = proc.info
+                
+                # Clean up zombie processes
+                if proc_info['status'] == psutil.STATUS_ZOMBIE:
+                    zombies_cleaned += 1
+                    print(f"  Found zombie process: PID {proc_info['pid']} ({proc_info['name']})")
+                    # Zombies can't be killed, they just need to be reaped
+                    # The parent process needs to call wait() - this is handled in our subprocess code
+                
+                # Clean up hanging git processes
+                elif proc_info['name'] == 'git' and proc_info['cmdline']:
+                    # Check if it's been running too long (5 minutes instead of 10)
+                    if proc.create_time() < (datetime.now().timestamp() - 300):
+                        print(f"  Terminating hanging git process: {proc_info['pid']}")
                         proc.terminate()
-                        proc.wait(timeout=5)
+                        try:
+                            proc.wait(timeout=3)
+                            git_procs_cleaned += 1
+                        except psutil.TimeoutExpired:
+                            proc.kill()
+                            proc.wait(timeout=1)
+                            git_procs_cleaned += 1
+                            
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
                 pass
+        
+        if zombies_cleaned > 0:
+            print(f"  Found {zombies_cleaned} zombie processes (will be reaped by parent)")
+        if git_procs_cleaned > 0:
+            print(f"  Cleaned up {git_procs_cleaned} hanging git processes")
+        if zombies_cleaned == 0 and git_procs_cleaned == 0:
+            print("  No processes to clean up")
+            
     except Exception as e:
-        print(f"  Warning: Could not cleanup git processes: {e}")
+        print(f"  Warning: Could not cleanup processes: {e}")
 
 
 def airtable_request(path: str, method: str = 'GET', params: Dict = None) -> Dict[str, Any]:

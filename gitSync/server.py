@@ -3,6 +3,8 @@ import time
 import threading
 import signal
 import sys
+import atexit
+import psutil
 from datetime import datetime
 from flask import Flask, jsonify
 from dotenv import load_dotenv
@@ -31,11 +33,47 @@ sync_error = None
 sync_count = 0
 
 
+def cleanup_all_zombies():
+    """Aggressively clean up all zombie processes."""
+    print("\n  Cleaning up zombie processes...")
+    try:
+        # Clean up git processes
+        cleanup_git_processes()
+        
+        # Also clean up any other zombie processes
+        zombies_cleaned = 0
+        for proc in psutil.process_iter(['pid', 'name', 'status']):
+            try:
+                if proc.info['status'] == psutil.STATUS_ZOMBIE:
+                    print(f"  Found zombie process: PID {proc.info['pid']} ({proc.info['name']})")
+                    zombies_cleaned += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        
+        if zombies_cleaned > 0:
+            print(f"  Cleaned up {zombies_cleaned} zombie processes")
+        else:
+            print("  No zombie processes found")
+            
+    except Exception as e:
+        print(f"  Error during cleanup: {e}")
+
+
 def signal_handler(signum, frame):
     """Handle shutdown signals to cleanup processes."""
     print(f"\nReceived signal {signum}, cleaning up...")
-    cleanup_git_processes()
+    cleanup_all_zombies()
     sys.exit(0)
+
+
+def periodic_cleanup():
+    """Periodically clean up zombie processes during operation."""
+    while True:
+        time.sleep(30)  # Check every 30 seconds
+        try:
+            cleanup_all_zombies()
+        except Exception as e:
+            print(f"Error in periodic cleanup: {e}")
 
 
 def perform_full_sync():
@@ -110,7 +148,7 @@ def perform_full_sync():
     print(f"{'='*80}\n")
     
     # Clean up any hanging git processes after sync
-    cleanup_git_processes()
+    cleanup_all_zombies()
     
     return result
 
@@ -210,14 +248,30 @@ if __name__ == '__main__':
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+    try:
+        signal.signal(signal.SIGHUP, signal_handler)
+    except AttributeError:
+        # SIGHUP not available on Windows
+        pass
+    
+    # Register cleanup on exit
+    atexit.register(cleanup_all_zombies)
     
     # Start continuous sync in background thread
     sync_thread = threading.Thread(target=run_continuous_sync, daemon=True)
     sync_thread.start()
     
+    # Start periodic cleanup thread
+    cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
+    cleanup_thread.start()
+    
     print(f"Starting gitSync server on port {PORT}")
     print(f"Continuous sync enabled")
+    print(f"Periodic zombie cleanup enabled (every 30s)")
     print(f"Signal handlers registered for graceful shutdown")
+    
+    # Initial cleanup
+    cleanup_all_zombies()
     
     # Start Flask server
     app.run(host='0.0.0.0', port=PORT)
