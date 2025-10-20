@@ -6,7 +6,8 @@ import shutil
 import tempfile
 import signal
 import psutil
-from typing import List, Dict, Any
+import atexit
+from typing import List, Dict, Any, Set
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -19,6 +20,10 @@ AIRTABLE_BASE_ID = os.environ.get('AIRTABLE_BASE_ID')
 AIRTABLE_POSTS_TABLE = 'Posts'
 AIRTABLE_API_BASE = 'https://api.airtable.com/v0'
 
+# Global set to track all spawned subprocesses
+_active_processes: Set[subprocess.Popen] = set()
+_cleanup_in_progress = False
+
 
 def cleanup_git_processes():
     """Clean up any hanging git processes."""
@@ -30,11 +35,151 @@ def cleanup_git_processes():
                     if proc.create_time() < (datetime.now().timestamp() - 600):  # 10 minutes
                         print(f"  Terminating hanging git process: {proc.info['pid']}")
                         proc.terminate()
-                        proc.wait(timeout=5)
+                        try:
+                            proc.wait(timeout=5)
+                        except psutil.TimeoutExpired:
+                            proc.kill()
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
                 pass
     except Exception as e:
         print(f"  Warning: Could not cleanup git processes: {e}")
+
+
+def cleanup_all_processes():
+    """Clean up all tracked subprocess instances."""
+    global _cleanup_in_progress
+    if _cleanup_in_progress:
+        return
+    
+    _cleanup_in_progress = True
+    print("\n  Cleaning up spawned processes...")
+    
+    # Create a copy to avoid modification during iteration
+    processes_to_clean = list(_active_processes)
+    
+    for proc in processes_to_clean:
+        try:
+            if proc.poll() is None:  # Process is still running
+                print(f"  Terminating process {proc.pid}")
+                proc.terminate()
+        except Exception as e:
+            print(f"  Error terminating process: {e}")
+    
+    # Wait for processes to terminate gracefully
+    if processes_to_clean:
+        try:
+            # Wait up to 5 seconds for all processes to terminate
+            for proc in processes_to_clean:
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+        except Exception as e:
+            print(f"  Error waiting for processes: {e}")
+    
+    # Force kill any remaining processes
+    for proc in processes_to_clean:
+        try:
+            if proc.poll() is None:
+                print(f"  Force killing process {proc.pid}")
+                proc.kill()
+                proc.wait(timeout=1)
+        except Exception:
+            pass
+    
+    _active_processes.clear()
+    print("  Process cleanup complete")
+
+
+def signal_handler(signum, frame):
+    """Handle termination signals."""
+    print(f"\n  Received signal {signum}, shutting down...")
+    cleanup_all_processes()
+    cleanup_git_processes()
+    exit(0)
+
+
+def run_subprocess_tracked(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
+    """
+    Run a subprocess with automatic tracking and cleanup.
+    This replaces direct subprocess.run() calls.
+    """
+    # Set default timeout if not provided
+    if 'timeout' not in kwargs:
+        kwargs['timeout'] = 300
+    
+    # Ensure we capture output
+    if 'capture_output' not in kwargs:
+        kwargs['capture_output'] = True
+    if 'text' not in kwargs:
+        kwargs['text'] = True
+    
+    proc = None
+    try:
+        # Use Popen for better control
+        popen_kwargs = kwargs.copy()
+        popen_kwargs.pop('check', None)  # Remove check, we'll handle it
+        popen_kwargs.pop('timeout', None)  # Remove timeout, we'll handle it
+        
+        # Set up pipes if capture_output is True
+        if popen_kwargs.pop('capture_output', False):
+            popen_kwargs['stdout'] = subprocess.PIPE
+            popen_kwargs['stderr'] = subprocess.PIPE
+        
+        proc = subprocess.Popen(cmd, **popen_kwargs)
+        _active_processes.add(proc)
+        
+        # Wait for completion with timeout
+        try:
+            stdout, stderr = proc.communicate(timeout=kwargs.get('timeout', 300))
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+            raise
+        
+        # Remove from tracking once complete
+        _active_processes.discard(proc)
+        
+        # Create CompletedProcess object
+        result = subprocess.CompletedProcess(
+            args=cmd,
+            returncode=proc.returncode,
+            stdout=stdout,
+            stderr=stderr
+        )
+        
+        # Check return code if requested
+        if kwargs.get('check', False) and result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode, cmd, output=stdout, stderr=stderr
+            )
+        
+        return result
+        
+    except Exception as e:
+        # Ensure process is removed from tracking even on error
+        if proc:
+            _active_processes.discard(proc)
+        raise
+    finally:
+        # Final cleanup
+        if proc and proc.poll() is None:
+            try:
+                proc.kill()
+                proc.wait(timeout=1)
+            except Exception:
+                pass
+
+
+# Register cleanup handlers
+atexit.register(cleanup_all_processes)
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+try:
+    signal.signal(signal.SIGHUP, signal_handler)
+except AttributeError:
+    # SIGHUP not available on Windows
+    pass
 
 
 def airtable_request(path: str, method: str = 'GET', params: Dict = None) -> Dict[str, Any]:
@@ -96,11 +241,9 @@ def clone_repo(github_url: str, clone_dir: str) -> bool:
         # Use --filter=blob:none for blobless clone - gets commit history and tree structure
         # but not file contents, which are fetched on-demand. Much faster!
         # Add timeout to prevent hanging processes
-        result = subprocess.run(
+        result = run_subprocess_tracked(
             ['git', 'clone', '--filter=blob:none', '--quiet', github_url, clone_dir],
             check=True,
-            capture_output=True,
-            text=True,
             timeout=300  # 5 minute timeout
         )
         return True
@@ -124,11 +267,9 @@ def get_commits_in_timerange(repo_dir: str, start_time: str = None, end_time: st
         elif end_time:
             cmd.append(f'--until={end_time}')
         
-        result = subprocess.run(
+        result = run_subprocess_tracked(
             cmd,
             cwd=repo_dir,
-            capture_output=True,
-            text=True,
             check=True,
             timeout=120  # 2 minute timeout
         )
@@ -160,11 +301,9 @@ def get_commit_changes(repo_dir: str, commit_hash: str, github_url: str) -> List
     """Get file changes for a specific commit with stats and GitHub links."""
     try:
         # Get diff stats for the commit
-        stats_result = subprocess.run(
+        stats_result = run_subprocess_tracked(
             ['git', 'show', '--numstat', '--pretty=format:', commit_hash],
             cwd=repo_dir,
-            capture_output=True,
-            text=True,
             check=True,
             timeout=60  # 1 minute timeout
         )
@@ -367,55 +506,61 @@ def update_post_git_changes(record_id: str, git_changes: str) -> bool:
 
 def main():
     """Main function to fetch and display all posts."""
-    if not AIRTABLE_API_KEY:
-        raise ValueError("AIRTABLE_API_KEY environment variable is not set")
-    
-    if not AIRTABLE_BASE_ID:
-        raise ValueError("AIRTABLE_BASE_ID environment variable is not set")
-    
-    # Clean up any hanging git processes before starting
-    cleanup_git_processes()
-    
-    print(f"Fetching all posts from Airtable...")
-    print(f"Base ID: {AIRTABLE_BASE_ID}")
-    print(f"Table: {AIRTABLE_POSTS_TABLE}")
-    print()
-    
-    posts = fetch_all_posts()
-    
-    print(f"\nTotal posts fetched: {len(posts)}")
-    
-    # Group posts by GitHub URL
-    grouped_data = group_posts_by_github_url(posts)
-    
-    print(f"\nGrouped into {len(grouped_data)} unique GitHub repositories")
-    print("\n" + "="*80)
-    print("Analyzing repositories and updating git changes...")
-    print("="*80 + "\n")
-    
-    # Process each repository
-    for i, repo in enumerate(grouped_data, 1):
-        print(f"\nRepository {i}/{len(grouped_data)}: {repo['github_url']}")
-        print(f"  Total posts: {len(repo['posts'])}")
+    try:
+        if not AIRTABLE_API_KEY:
+            raise ValueError("AIRTABLE_API_KEY environment variable is not set")
         
-        # Analyze repo and get git changes
-        repo['posts'] = analyze_repo_for_posts(repo['github_url'], repo['posts'])
+        if not AIRTABLE_BASE_ID:
+            raise ValueError("AIRTABLE_BASE_ID environment variable is not set")
         
-        # Update Airtable with git changes
-        for post in repo['posts']:
-            if post.get('git_changes'):
-                print(f"  Updating Airtable for post {post['post_id']}...")
-                update_post_git_changes(post['record_id'], post['git_changes'])
-    
-    # Save to JSON file
-    output_file = 'posts_data.json'
-    with open(output_file, 'w') as f:
-        json.dump(grouped_data, f, indent=2)
-    
-    print(f"\n\n{'='*80}")
-    print(f"Complete! Data saved to {output_file}")
-    print(f"Processed {len(grouped_data)} repositories")
-    print(f"{'='*80}")
+        # Clean up any hanging git processes before starting
+        cleanup_git_processes()
+        
+        print(f"Fetching all posts from Airtable...")
+        print(f"Base ID: {AIRTABLE_BASE_ID}")
+        print(f"Table: {AIRTABLE_POSTS_TABLE}")
+        print()
+        
+        posts = fetch_all_posts()
+        
+        print(f"\nTotal posts fetched: {len(posts)}")
+        
+        # Group posts by GitHub URL
+        grouped_data = group_posts_by_github_url(posts)
+        
+        print(f"\nGrouped into {len(grouped_data)} unique GitHub repositories")
+        print("\n" + "="*80)
+        print("Analyzing repositories and updating git changes...")
+        print("="*80 + "\n")
+        
+        # Process each repository
+        for i, repo in enumerate(grouped_data, 1):
+            print(f"\nRepository {i}/{len(grouped_data)}: {repo['github_url']}")
+            print(f"  Total posts: {len(repo['posts'])}")
+            
+            # Analyze repo and get git changes
+            repo['posts'] = analyze_repo_for_posts(repo['github_url'], repo['posts'])
+            
+            # Update Airtable with git changes
+            for post in repo['posts']:
+                if post.get('git_changes'):
+                    print(f"  Updating Airtable for post {post['post_id']}...")
+                    update_post_git_changes(post['record_id'], post['git_changes'])
+        
+        # Save to JSON file
+        output_file = 'posts_data.json'
+        with open(output_file, 'w') as f:
+            json.dump(grouped_data, f, indent=2)
+        
+        print(f"\n\n{'='*80}")
+        print(f"Complete! Data saved to {output_file}")
+        print(f"Processed {len(grouped_data)} repositories")
+        print(f"{'='*80}")
+        
+    finally:
+        # Ensure cleanup happens even if there's an error
+        cleanup_all_processes()
+        cleanup_git_processes()
 
 
 if __name__ == "__main__":
