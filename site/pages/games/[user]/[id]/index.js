@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import Head from 'next/head';
 import fs from 'fs';
 import path from 'path';
+import { renderMarkdownText } from '@/components/utils/markdownRenderer';
 
 const PlayGameComponent = dynamic(() => import('@/components/utils/playGameComponent'), { ssr: false });
 
@@ -751,7 +752,7 @@ function JournalPostRenderer({ content, attachments, playLink, gameName, thumbna
       )}
 
       {/* Content */}
-      <div style={{ whiteSpace: 'pre-wrap' }}>{content || ''}</div>
+      <div style={{ whiteSpace: 'pre-wrap' }}>{renderMarkdownText(content) || ''}</div>
 
       {/* Artlog-specific rendering */}
       {isArtlog && (
