@@ -76,63 +76,96 @@ async function findUserByToken(token) {
   return (data.records && data.records[0]) || null;
 }
 
-async function getOrdersForUser(userId) {
-  // Try a different filter approach for linked records
-  const userEscaped = safeEscapeFormulaString(userId);
+async function getAllRecordsWithPagination(tableName, filterFormula = null) {
+  let allRecords = [];
+  let offset = null;
   
-  // Method 1: Try direct comparison with the linked record
-  let filterFormula = `{Spent By} = "${userEscaped}"`;
-  // console.log('Trying filter formula 1:', filterFormula);
-  
-  let params = new URLSearchParams({
-    filterByFormula: filterFormula,
-  });
-  
-  let data = await airtableRequest(`${encodeURIComponent(AIRTABLE_ORDERS_TABLE)}?${params.toString()}`, {
-    method: 'GET',
-  });
-  
-  // console.log('Method 1 results:', data.records?.length || 0);
-  
-  // If that doesn't work, try method 2
-  if (!data.records || data.records.length === 0) {
-    filterFormula = `FIND("${userEscaped}", ARRAYJOIN({Spent By}))`;
-    // console.log('Trying filter formula 2:', filterFormula);
+  do {
+    const params = new URLSearchParams();
+    if (filterFormula) {
+      params.set('filterByFormula', filterFormula);
+    }
+    if (offset) {
+      params.set('offset', offset);
+    }
     
-    params = new URLSearchParams({
-      filterByFormula: filterFormula,
-    });
-    
-    data = await airtableRequest(`${encodeURIComponent(AIRTABLE_ORDERS_TABLE)}?${params.toString()}`, {
-      method: 'GET',
-    });
-    
-    // console.log('Method 2 results:', data.records?.length || 0);
-  }
-  
-  // If still no results, try method 3
-  if (!data.records || data.records.length === 0) {
-    // Just get all orders and filter in JavaScript
-    // console.log('Falling back to client-side filtering...');
-    data = await airtableRequest(`${encodeURIComponent(AIRTABLE_ORDERS_TABLE)}`, {
+    const data = await airtableRequest(`${encodeURIComponent(tableName)}?${params.toString()}`, {
       method: 'GET',
     });
     
     if (data.records) {
-      data.records = data.records.filter(record => {
-        const spentBy = record.fields['Spent By'];
-        return Array.isArray(spentBy) && spentBy.includes(userId);
-      });
+      allRecords = allRecords.concat(data.records);
     }
     
-    // console.log('Method 3 (client-side) results:', data.records?.length || 0);
+    offset = data.offset;
+    // console.log(`Fetched ${data.records?.length || 0} records, total so far: ${allRecords.length}, has more: ${!!offset}`);
+  } while (offset);
+  
+  return allRecords;
+}
+
+async function getOrdersForUser(userId) {
+  const userEscaped = safeEscapeFormulaString(userId);
+  // console.log('Looking for orders for user:', userId);
+  
+  let records = [];
+  
+  // Method 1: Try direct comparison with the linked record
+  try {
+    const filterFormula = `{Spent By} = "${userEscaped}"`;
+    // console.log('Trying filter formula 1:', filterFormula);
+    
+    records = await getAllRecordsWithPagination(AIRTABLE_ORDERS_TABLE, filterFormula);
+    // console.log('Method 1 results:', records.length);
+  } catch (error) {
+    // console.log('Method 1 failed:', error.message);
   }
   
-  if (!data.records) return [];
+  // If that doesn't work, try method 2
+  if (records.length === 0) {
+    try {
+      const filterFormula = `FIND("${userEscaped}", ARRAYJOIN({Spent By}))`;
+      // console.log('Trying filter formula 2:', filterFormula);
+      
+      records = await getAllRecordsWithPagination(AIRTABLE_ORDERS_TABLE, filterFormula);
+      // console.log('Method 2 results:', records.length);
+    } catch (error) {
+      // console.log('Method 2 failed:', error.message);
+    }
+  }
+  
+  // If still no results, try method 3 - get all and filter client-side
+  if (records.length === 0) {
+    try {
+      // console.log('Falling back to client-side filtering...');
+      const allRecords = await getAllRecordsWithPagination(AIRTABLE_ORDERS_TABLE);
+      // console.log('Got all records:', allRecords.length);
+      
+      records = allRecords.filter(record => {
+        const spentBy = record.fields['Spent By'];
+        // Handle both array and single value cases
+        if (Array.isArray(spentBy)) {
+          return spentBy.includes(userId);
+        } else if (typeof spentBy === 'string') {
+          return spentBy === userId;
+        }
+        return false;
+      });
+      
+      // console.log('Method 3 (client-side) results:', records.length);
+    } catch (error) {
+      // console.log('Method 3 failed:', error.message);
+    }
+  }
+  
+  if (!records || records.length === 0) {
+    // console.log('No orders found for user');
+    return [];
+  }
   
   // Get shop item details for each order
   const ordersWithDetails = await Promise.all(
-    data.records.map(async (order) => {
+    records.map(async (order) => {
       const shopItemId = order.fields['Shop Item']?.[0];
       let shopItemName = 'Unknown Item';
       let shopItemThumbnail = '/comingSoon.png';
