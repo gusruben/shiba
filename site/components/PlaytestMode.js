@@ -1,6 +1,9 @@
 import React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import MarkdownRenderer from '@/components/utils/markdownRenderer';
+import MarkdownGuide from '@/components/MarkdownGuide';
+import ToggleComponent from '@/components/ToggleComponent';
 
 const PostAttachmentRenderer = dynamic(() => import('@/components/utils/PostAttachmentRenderer'), { ssr: false });
 const PlayGameComponent = dynamic(() => import('@/components/utils/playGameComponent'), { ssr: false });
@@ -28,7 +31,15 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
     audio: '',
     mood: ''
   });
+  const [previewMode, setPreviewMode] = useState({
+    fun: false,
+    art: false,
+    creativity: false,
+    audio: false,
+    mood: false
+  });
   const [additionalFeedback, setAdditionalFeedback] = useState('');
+  const [additionalFeedbackPreview, setAdditionalFeedbackPreview] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -474,9 +485,17 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
               textAlign: "center", 
               padding: "2rem",
               color: "white",
-              fontSize: "clamp(0.875rem, 1.25rem, 1.5rem)"
+              fontSize: "clamp(0.875rem, 1.25rem, 1.5rem)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
             }}>
-              No posts found for this developer's journey.
+              <div>
+                No posts found for this developer's journey.
+              </div>
+              <div style={{ fontSize: "1rem", color: "#ff6fa5" }}>
+                Try to reload
+              </div>
             </div>
           )}
         </div>
@@ -695,15 +714,37 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
                     marginBottom: "0.5rem"
                   }}>
                     How can they improve {category}? Please be as specific as you can *
+                  </label>
+                  
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 10px',
+                    border: "2px solid rgba(255, 255, 255, 0.3)",
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: '6px 6px 0 0'
+                  }}>
                     <span style={{
-                      fontSize: "clamp(0.75rem, 1rem, 1.25rem)",
+                      color: '#fff',
+                      fontSize: "0.85rem",
                       fontWeight: "normal",
-                      opacity: 0.8,
-                      marginLeft: "0.5rem"
+                      opacity: 0.8
                     }}>
                       ({ratingFeedback[category].trim().split(/\s+/).filter(word => word.length > 0).length}/20 words minimum)
                     </span>
-                  </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <MarkdownGuide darkMode={true} />
+                      <ToggleComponent
+                        textOff="Raw"
+                        textOn="Preview"
+                        isOn={previewMode[category]}
+                        setState={(value) => setPreviewMode(prev => ({ ...prev, [category]: value }))}
+                      />
+                    </div>
+                  </div>
+                  
                   <textarea
                     value={ratingFeedback[category]}
                     onChange={(e) => {
@@ -723,13 +764,38 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
                       fontSize: "14px",
                       backgroundColor: "rgba(255, 255, 255, 0.1)",
                       border: "2px solid rgba(255, 255, 255, 0.3)",
-                      borderRadius: "6px",
+                      borderRadius: "0 0 6px 6px",
+                      borderTop: "none",
                       color: "white",
                       resize: "vertical",
                       fontFamily: "inherit",
-                      lineHeight: "1.4"
+                      lineHeight: "1.4",
+                      display: previewMode[category] ? 'none' : 'block'
                     }}
                   />
+                  {/* Preview */}
+                  {previewMode[category] && (
+                    <div style={{
+                      width: "100%",
+                      minHeight: "80px",
+                      padding: "12px",
+                      fontSize: "14px",
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                      border: "2px solid rgba(255, 255, 255, 0.3)",
+                      borderRadius: "0 0 6px 6px",
+                      borderTop: "none",
+                      color: "white",
+                      fontFamily: "inherit",
+                      lineHeight: "1.4",
+                      overflowWrap: "break-word"
+                    }}>
+                      {ratingFeedback[category].trim() ? (
+                        <MarkdownRenderer text={ratingFeedback[category]} darkMode={true} />
+                      ) : (
+                        <MarkdownRenderer text="Nothing to preview yet. Switch to `Raw` to write your feedback." darkMode={true} />
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -909,62 +975,74 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
           </div>
 
           {/* Game Component */}
-          {playtestGame?.gameLink && (() => {
-            // Extract game ID from the URL like PostAttachmentRenderer does
-            let gameId = '';
-            const gameLink = Array.isArray(playtestGame.gameLink) ? playtestGame.gameLink[0] : playtestGame.gameLink;
-            if (gameLink) {
-              try {
-                const path = gameLink.startsWith('http') ? new URL(gameLink).pathname : gameLink;
-                const m = /\/play\/([^\/?#]+)/.exec(path);
-                gameId = m && m[1] ? decodeURIComponent(m[1]) : '';
-              } catch (_) {
-                gameId = '';
+          {playtestGame?.gameLink
+            ? (() => {
+              // Extract game ID from the URL like PostAttachmentRenderer does
+              let gameId = '';
+              const gameLink = Array.isArray(playtestGame.gameLink) ? playtestGame.gameLink[0] : playtestGame.gameLink;
+              if (gameLink) {
+                try {
+                  const path = gameLink.startsWith('http') ? new URL(gameLink).pathname : gameLink;
+                  const m = /\/play\/([^\/?#]+)/.exec(path);
+                  gameId = m && m[1] ? decodeURIComponent(m[1]) : '';
+                } catch (_) {
+                  gameId = '';
+                }
               }
-            }
-            
-            return gameId ? (
-              <div style={{
-                width: "100%",
-                maxWidth: "800px",
-                margin: "0 auto"
-              }}>
-                <PlayGameComponent
-                  gameId={gameId}
-                  gameName={playtestGame.gameName}
-                  thumbnailUrl={playtestGame.gameThumbnail}
-                  animatedBackground={playtestGame.gameAnimatedBackground || ''}
-                  token={token}
-                  onPlayCreated={async (play) => {
-                    try {
-                      const response = await fetch('/api/CreatePlay', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                          token: token || null, // Pass null for anonymous plays
-                          gameName: playtestGame.gameName || '' 
-                        })
-                      });
-                      
-                      const data = await response.json();
-                      if (response.ok && data?.ok) {
-                        console.log('Play created successfully:', data.play);
-                      } else {
-                        console.error('Failed to create play:', data.message);
+              
+              return gameId ? (
+                <div style={{
+                  width: "100%",
+                  maxWidth: "800px",
+                  margin: "0 auto"
+                }}>
+                  <PlayGameComponent
+                    gameId={gameId}
+                    gameName={playtestGame.gameName}
+                    thumbnailUrl={playtestGame.gameThumbnail}
+                    animatedBackground={playtestGame.gameAnimatedBackground || ''}
+                    token={token}
+                    onPlayCreated={async (play) => {
+                      try {
+                        const response = await fetch('/api/CreatePlay', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ 
+                            token: token || null, // Pass null for anonymous plays
+                            gameName: playtestGame.gameName || '' 
+                          })
+                        });
+                        
+                        const data = await response.json();
+                        if (response.ok && data?.ok) {
+                          console.log('Play created successfully:', data.play);
+                        } else {
+                          console.error('Failed to create play:', data.message);
+                        }
+                      } catch (error) {
+                        console.error('Error creating play:', error);
                       }
-                    } catch (error) {
-                      console.error('Error creating play:', error);
-                    }
-                  }}
-                  onGameStart={() => {
-                    // console.log('Game started!');
-                    // Start timer when game actually starts
-                    setGameStartTime(Date.now());
-                  }}
-                />
+                    }}
+                    onGameStart={() => {
+                      // console.log('Game started!');
+                      // Start timer when game actually starts
+                      setGameStartTime(Date.now());
+                    }}
+                  />
+                </div>
+              ) : null;
+            })()
+            : (
+              <div style={{ 
+                textAlign: "center", 
+                padding: "2rem",
+              }}>
+                <span style={{ fontSize: "1.25rem", color: "#ff6fa5" }}>
+                  Try to reload
+                </span>
               </div>
-            ) : null;
-          })()}
+            )
+          }
 
           {/* Rate Game Button */}
           {gameStartTime && (
@@ -1113,18 +1191,53 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
           <div style={{
             marginTop: '2rem',
             width: '100%',
-            maxWidth: '600px',
-            margin: '2rem auto 0'
+            maxWidth: '800px',
+            margin: '2rem auto 0',
+            padding: "1rem",
+            border: "1px solid rgba(255,255,255,0.3)",
+            borderRadius: "8px",
+            background: "rgba(255,255,255,0.1)"
           }}>
-            <h3 style={{
-              color: 'white',
-              fontSize: 'clamp(1rem, 1.5rem, 2rem)',
-              fontWeight: 'bold',
-              marginBottom: '1rem',
-              textAlign: 'center'
+            <label style={{
+              color: "white",
+              fontSize: "clamp(0.875rem, 1.125rem, 1.375rem)",
+              fontWeight: "bold",
+              display: "block",
+              marginBottom: "0.5rem"
             }}>
-              Feedback to the creator
-            </h3>
+              Any additional feedback for the creator?
+            </label>
+            
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '8px 10px',
+              border: "2px solid rgba(255, 255, 255, 0.3)",
+              borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '6px 6px 0 0'
+            }}>
+              <span style={{
+                color: '#fff',
+                fontSize: "0.85rem",
+                fontWeight: "normal",
+                opacity: 0.8
+              }}>
+                (Optional)
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MarkdownGuide darkMode={true} />
+                <ToggleComponent
+                  textOff="Raw"
+                  textOn="Preview"
+                  isOn={additionalFeedbackPreview}
+                  setState={setAdditionalFeedbackPreview}
+                  playSound={playSound}
+                />
+              </div>
+            </div>
+            
             <textarea
               value={additionalFeedback}
               onChange={(e) => {
@@ -1134,19 +1247,45 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
               }}
               placeholder="Share any additional thoughts about the game..."
               style={{
-                width: '100%',
-                minHeight: '200px',
-                padding: '16px',
-                fontSize: '16px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                border: '2px solid rgba(255, 255, 255, 0.3)',
-                borderRadius: '8px',
-                color: 'white',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-                lineHeight: '1.5'
+                width: "100%",
+                minHeight: "80px",
+                padding: "12px",
+                fontSize: "14px",
+                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                border: "2px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "0 0 6px 6px",
+                borderTop: "none",
+                color: "white",
+                resize: "vertical",
+                fontFamily: "inherit",
+                lineHeight: "1.4",
+                display: additionalFeedbackPreview ? 'none' : 'block'
               }}
             />
+            
+            {/* Preview Div */}
+            {additionalFeedbackPreview && (
+              <div style={{
+                width: "100%",
+                minHeight: "80px",
+                padding: "12px",
+                fontSize: "14px",
+                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                border: "2px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "0 0 6px 6px",
+                borderTop: "none",
+                color: "white",
+                fontFamily: "inherit",
+                lineHeight: "1.4",
+                overflowWrap: "break-word"
+              }}>
+                {additionalFeedback.trim() ? (
+                  <MarkdownRenderer text={additionalFeedback} darkMode={true} />
+                ) : (
+                  <MarkdownRenderer text="Nothing to preview yet. Switch to `Raw` to write your feedback." darkMode={true} />
+                )}
+              </div>
+            )}
           </div>
           
           {/* Buttons */}

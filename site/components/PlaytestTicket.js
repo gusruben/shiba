@@ -191,7 +191,56 @@ export default function PlaytestTicket({ playtest, onPlaytestClick }) {
                   {daysRemaining.toFixed(1)} days remaining
               </div>
             )}
-            
+
+            {playtest.status !== 'Complete'
+              ? (!playtest.ownerSlackId
+                ? (
+                  <div style={{
+                    fontSize: 14,
+                    color: '#ff0000ff',
+                    fontWeight: 500
+                  }}>
+                      Posts will not load!
+                  </div>
+                )
+                : (
+                  <div style={{
+                    fontSize: 14,
+                    color: '#329939ff',
+                    fontWeight: 500
+                  }}>
+                      Posts should load!
+                  </div>
+                )
+              )
+              : null
+            }
+
+            {playtest.status !== 'Complete'
+              ? (
+                !playtest.gameLink
+                ? (
+                  <div style={{
+                    fontSize: 14,
+                    color: '#ff0000ff',
+                    fontWeight: 500
+                  }}>
+                      Game will not show!
+                  </div>
+                )
+                : (
+                  <div style={{
+                    fontSize: 14,
+                    color: '#329939ff',
+                    fontWeight: 500
+                  }}>
+                      Game should show!
+                  </div>
+                )
+              )
+              : null
+            }
+
             {/* <span style={{ fontSize: 12, opacity: 0.7, color: '#000' }}>
               ID: {playtest.playtestId}
             </span> */}

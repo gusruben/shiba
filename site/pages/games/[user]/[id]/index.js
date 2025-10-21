@@ -4,6 +4,9 @@ import dynamic from 'next/dynamic';
 import Head from 'next/head';
 import fs from 'fs';
 import path from 'path';
+import MarkdownRenderer from '@/components/utils/markdownRenderer';
+import MarkdownGuide from '@/components/MarkdownGuide';
+import ToggleComponent from '@/components/ToggleComponent';
 
 const PlayGameComponent = dynamic(() => import('@/components/utils/playGameComponent'), { ssr: false });
 
@@ -257,8 +260,10 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
 }
 
 // Journal Post Renderer - renders post content without profile header
-        function CommentsSection({ token, commentText, setCommentText, commentStarRating, setCommentStarRating, isSubmittingComment, setIsSubmittingComment, feedback, gameData, onCommentSubmitted }) {
+function CommentsSection({ token, commentText, setCommentText, commentStarRating, setCommentStarRating, isSubmittingComment, setIsSubmittingComment, feedback, gameData, onCommentSubmitted }) {
   const [feedbackWithProfiles, setFeedbackWithProfiles] = useState([]);
+  const [markdownPreviewMode, setMarkdownPreviewMode] = useState(false); // Toggle for markdown preview
+  const [markdownPreviewContent, setMarkdownPreviewContent] = useState(null); // Cached preview content
 
   // Fetch profile data for feedback creators
   useEffect(() => {
@@ -310,7 +315,8 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
       borderRadius: "10px",
       background: "rgba(255, 255, 255, 0.8)",
       padding: "16px",
-      marginTop: "16px"
+      marginTop: "16px",
+      marginBottom: "16px"
     }}>
       <h3 style={{
         fontSize: '16px',
@@ -322,11 +328,40 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
       
       {/* Comment Input */}
       <div style={{ marginBottom: '16px' }}>
+        {/* Toggle buttons for Raw/Preview */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '8px 10px',
+          border: '1px solid rgba(0, 0, 0, 0.18)',
+          borderRadius: "10px 10px 0 0",
+          background: 'rgba(255, 255, 255, 0.65)'
+        }}>
+          <span style={{ fontSize: '14px', color: '#333' }}>
+            Leave a comment...
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <MarkdownGuide />
+            <ToggleComponent
+              textOff="Raw"
+              textOn="Preview"
+              isOn={markdownPreviewMode}
+              setState={(value) => {
+                if (value) {
+                  setMarkdownPreviewContent(commentText.trim() ? <MarkdownRenderer text={commentText} darkMode={false} /> : null);
+                }
+                setMarkdownPreviewMode(value);
+              }}
+            />
+          </div>
+        </div>
+
         {/* Text area */}
         <textarea
           value={commentText}
           onChange={(e) => setCommentText(e.target.value)}
-          placeholder="Leave a comment..."
+          placeholder="Basic Markdown Supported!"
           style={{
             width: "100%",
             minHeight: "80px",
@@ -336,11 +371,35 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
             padding: "10px",
             outline: "none",
             border: "1px solid rgba(0, 0, 0, 0.18)",
-            borderRadius: "10px 10px 0 0",
+            borderTop: "none",
+            borderBottom: "none",
             background: "rgba(255, 255, 255, 0.75)",
-            fontFamily: "inherit"
+            fontFamily: "inherit",
+            display: markdownPreviewMode ? "none" : "block"
           }}
         />
+        <div
+          style={{
+            width: "100%",
+            minHeight: "80px",
+            resize: "vertical",
+            fontSize: "14px",
+            boxSizing: "border-box",
+            padding: "10px",
+            outline: "none",
+            borderLeft: "1px solid rgba(0, 0, 0, 0.18)",
+            borderRight: "1px solid rgba(0, 0, 0, 0.18)",
+            background: "rgba(255, 255, 255, 0.75)",
+            fontFamily: "inherit",
+            display: markdownPreviewMode ? 'block' : 'none'
+          }}
+        >
+          {markdownPreviewContent || (
+            <span style={{ opacity: 0.65, fontStyle: 'italic', fontSize: '14px' }}>
+              <MarkdownRenderer text="Nothing to preview yet. Switch to `Raw` to write your post." darkMode={false} />
+            </span>
+          )}
+        </div>
 
         {/* Star rating and button container */}
         <div className="comment-actions" style={{
@@ -351,7 +410,6 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
           background: "white",
           border: "1px solid rgba(0, 0, 0, 0.18)",
           borderTop: "1px solid rgba(0, 0, 0, 0.18)",
-          marginTop: "-6px",
           borderRadius: "0 0 10px 10px",
           flexWrap: "wrap",
           gap: "8px"
@@ -464,10 +522,11 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
         </div>
       </div>
 
-              {/* Display existing feedback */}
+      {/* Display existing feedback */}
               {feedbackWithProfiles && feedbackWithProfiles.length > 0 ? (
                 <div style={{ marginTop: '16px' }}>
                   {feedbackWithProfiles.map((comment, index) => (
+                    console.log('[CommentsSection] Rendering comment:', comment),
                     <div key={comment.id || index} style={{ marginBottom: index < feedbackWithProfiles.length - 1 ? '16px' : '0' }}>
                       {/* Divider line between comments */}
                       {index > 0 && (
@@ -630,7 +689,7 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
                         lineHeight: '1.4',
                         whiteSpace: 'pre-wrap'
                       }}>
-                        {comment.message}
+                        <MarkdownRenderer text={comment.message} darkMode={false} />
                       </div>
                     </div>
                   ))}
@@ -751,7 +810,7 @@ function JournalPostRenderer({ content, attachments, playLink, gameName, thumbna
       )}
 
       {/* Content */}
-      <div style={{ whiteSpace: 'pre-wrap' }}>{content || ''}</div>
+      <div style={{ whiteSpace: 'pre-wrap' }}><MarkdownRenderer text={content} darkMode={false} /></div>
 
       {/* Artlog-specific rendering */}
       {isArtlog && (
