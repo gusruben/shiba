@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { renderMarkdownText } from '@/components/utils/markdownRenderer';
 import MarkdownGuide from '@/components/MarkdownGuide';
+import ToggleComponent from '@/components/ToggleComponent';
 
 const PlayGameComponent = dynamic(() => import('@/components/utils/playGameComponent'), { ssr: false });
 
@@ -342,52 +343,17 @@ function CommentsSection({ token, commentText, setCommentText, commentStarRating
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <MarkdownGuide />
-            <div style={{
-              display: 'flex',
-              gap: '4px',
-              border: '1px solid rgba(0, 0, 0, 0.18)',
-              borderRadius: '6px',
-              padding: '2px',
-              background: 'rgba(255, 255, 255, 0.85)'
-            }}>
-              <button
-                type="button"
-                onClick={() => setMarkdownPreviewMode(false)}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  background: !markdownPreviewMode ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
-                  color: !markdownPreviewMode ? '#fff' : 'rgba(0, 0, 0, 0.7)',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                Raw
-              </button>
-              <button
-                type="button"
-                onClick={() => {
+            <ToggleComponent
+              textOff="Raw"
+              textOn="Preview"
+              isOn={markdownPreviewMode}
+              setState={(value) => {
+                if (value) {
                   setMarkdownPreviewContent(commentText.trim() ? renderMarkdownText(commentText) : null);
-                  setMarkdownPreviewMode(true);
-                }}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  background: markdownPreviewMode ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
-                  color: markdownPreviewMode ? '#fff' : 'rgba(0, 0, 0, 0.7)',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                Preview
-              </button>
-            </div>
+                }
+                setMarkdownPreviewMode(value);
+              }}
+            />
           </div>
         </div>
 

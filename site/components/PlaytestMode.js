@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { renderMarkdownText } from '@/components/utils/markdownRenderer';
 import MarkdownGuide from '@/components/MarkdownGuide';
+import ToggleComponent from '@/components/ToggleComponent';
 
 const PostAttachmentRenderer = dynamic(() => import('@/components/utils/PostAttachmentRenderer'), { ssr: false });
 const PlayGameComponent = dynamic(() => import('@/components/utils/playGameComponent'), { ssr: false });
@@ -707,7 +708,6 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
                     How can they improve {category}? Please be as specific as you can *
                   </label>
                   
-                  {/* Raw/Preview Toggle */}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -728,55 +728,12 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <MarkdownGuide darkMode={true} />
-                      <div style={{
-                        display: 'flex',
-                        gap: '4px',
-                        border: '1px solid rgba(255, 255, 255, 0.3)',
-                        borderRadius: '6px',
-                        padding: '2px',
-                        background: 'rgba(255, 255, 255, 0.15)'
-                      }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            playSound?.("next.mp3");
-                            setPreviewMode(prev => ({ ...prev, [category]: false }));
-                          }}
-                          style={{
-                            padding: '4px 10px',
-                            fontSize: '11px',
-                            fontWeight: '600',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            background: !previewMode[category] ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
-                            color: !previewMode[category] ? '#fff' : 'rgba(255, 255, 255, 0.7)',
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          Raw
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            playSound?.("next.mp3");
-                            setPreviewMode(prev => ({ ...prev, [category]: true }));
-                          }}
-                          style={{
-                            padding: '4px 10px',
-                            fontSize: '11px',
-                            fontWeight: '600',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            background: previewMode[category] ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
-                            color: previewMode[category] ? '#fff' : 'rgba(255, 255, 255, 0.7)',
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          Preview
-                        </button>
-                      </div>
+                      <ToggleComponent
+                        textOff="Raw"
+                        textOn="Preview"
+                        isOn={previewMode[category]}
+                        setState={(value) => setPreviewMode(prev => ({ ...prev, [category]: value }))}
+                      />
                     </div>
                   </div>
                   
@@ -1231,7 +1188,6 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
               Any additional feedback for the creator?
             </label>
             
-            {/* Raw/Preview Toggle */}
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -1252,55 +1208,13 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <MarkdownGuide darkMode={true} />
-                <div style={{
-                  display: 'flex',
-                  gap: '4px',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  borderRadius: '6px',
-                  padding: '2px',
-                  background: 'rgba(255, 255, 255, 0.15)'
-                }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSound?.("next.mp3");
-                      setAdditionalFeedbackPreview(false);
-                    }}
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      background: !additionalFeedbackPreview ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
-                      color: !additionalFeedbackPreview ? '#fff' : 'rgba(255, 255, 255, 0.7)',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    Raw
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSound?.("next.mp3");
-                      setAdditionalFeedbackPreview(true);
-                    }}
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      background: additionalFeedbackPreview ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
-                      color: additionalFeedbackPreview ? '#fff' : 'rgba(255, 255, 255, 0.7)',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    Preview
-                  </button>
-                </div>
+                <ToggleComponent
+                  textOff="Raw"
+                  textOn="Preview"
+                  isOn={additionalFeedbackPreview}
+                  setState={setAdditionalFeedbackPreview}
+                  playSound={playSound}
+                />
               </div>
             </div>
             
