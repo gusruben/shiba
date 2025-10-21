@@ -1,6 +1,7 @@
 import React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { renderMarkdownText } from '@/components/utils/markdownRenderer';
 
 const PostAttachmentRenderer = dynamic(() => import('@/components/utils/PostAttachmentRenderer'), { ssr: false });
 const PlayGameComponent = dynamic(() => import('@/components/utils/playGameComponent'), { ssr: false });
@@ -28,7 +29,15 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
     audio: '',
     mood: ''
   });
+  const [previewMode, setPreviewMode] = useState({
+    fun: false,
+    art: false,
+    creativity: false,
+    audio: false,
+    mood: false
+  });
   const [additionalFeedback, setAdditionalFeedback] = useState('');
+  const [additionalFeedbackPreview, setAdditionalFeedbackPreview] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -695,15 +704,78 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
                     marginBottom: "0.5rem"
                   }}>
                     How can they improve {category}? Please be as specific as you can *
+                  </label>
+                  
+                  {/* Raw/Preview Toggle */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 10px',
+                    border: "2px solid rgba(255, 255, 255, 0.3)",
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: '6px 6px 0 0'
+                  }}>
                     <span style={{
-                      fontSize: "clamp(0.75rem, 1rem, 1.25rem)",
+                      color: '#fff',
+                      fontSize: "0.85rem",
                       fontWeight: "normal",
-                      opacity: 0.8,
-                      marginLeft: "0.5rem"
+                      opacity: 0.8
                     }}>
                       ({ratingFeedback[category].trim().split(/\s+/).filter(word => word.length > 0).length}/20 words minimum)
                     </span>
-                  </label>
+                    <div style={{
+                      display: 'flex',
+                      gap: '4px',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      borderRadius: '6px',
+                      padding: '2px',
+                      background: 'rgba(255, 255, 255, 0.15)'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSound?.("next.mp3");
+                          setPreviewMode(prev => ({ ...prev, [category]: false }));
+                        }}
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          background: !previewMode[category] ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
+                          color: !previewMode[category] ? '#fff' : 'rgba(255, 255, 255, 0.7)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        Raw
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSound?.("next.mp3");
+                          setPreviewMode(prev => ({ ...prev, [category]: true }));
+                        }}
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          background: previewMode[category] ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
+                          color: previewMode[category] ? '#fff' : 'rgba(255, 255, 255, 0.7)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        Preview
+                      </button>
+                    </div>
+                  </div>
+                  
                   <textarea
                     value={ratingFeedback[category]}
                     onChange={(e) => {
@@ -723,13 +795,38 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
                       fontSize: "14px",
                       backgroundColor: "rgba(255, 255, 255, 0.1)",
                       border: "2px solid rgba(255, 255, 255, 0.3)",
-                      borderRadius: "6px",
+                      borderRadius: "0 0 6px 6px",
+                      borderTop: "none",
                       color: "white",
                       resize: "vertical",
                       fontFamily: "inherit",
-                      lineHeight: "1.4"
+                      lineHeight: "1.4",
+                      display: previewMode[category] ? 'none' : 'block'
                     }}
                   />
+                  {/* Preview */}
+                  {previewMode[category] && (
+                    <div style={{
+                      width: "100%",
+                      minHeight: "80px",
+                      padding: "12px",
+                      fontSize: "14px",
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                      border: "2px solid rgba(255, 255, 255, 0.3)",
+                      borderRadius: "0 0 6px 6px",
+                      borderTop: "none",
+                      color: "white",
+                      fontFamily: "inherit",
+                      lineHeight: "1.4",
+                      overflowWrap: "break-word"
+                    }}>
+                      {ratingFeedback[category].trim() ? (
+                        renderMarkdownText(ratingFeedback[category])
+                      ) : (
+                        renderMarkdownText("Nothing to preview yet. Switch to ==Raw== to write your feedback.")
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -1113,18 +1210,93 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
           <div style={{
             marginTop: '2rem',
             width: '100%',
-            maxWidth: '600px',
-            margin: '2rem auto 0'
+            maxWidth: '800px',
+            margin: '2rem auto 0',
+            padding: "1rem",
+            border: "1px solid rgba(255,255,255,0.3)",
+            borderRadius: "8px",
+            background: "rgba(255,255,255,0.1)"
           }}>
-            <h3 style={{
-              color: 'white',
-              fontSize: 'clamp(1rem, 1.5rem, 2rem)',
-              fontWeight: 'bold',
-              marginBottom: '1rem',
-              textAlign: 'center'
+            <label style={{
+              color: "white",
+              fontSize: "clamp(0.875rem, 1.125rem, 1.375rem)",
+              fontWeight: "bold",
+              display: "block",
+              marginBottom: "0.5rem"
             }}>
-              Feedback to the creator
-            </h3>
+              Any additional feedback for the creator?
+            </label>
+            
+            {/* Raw/Preview Toggle */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '8px 10px',
+              border: "2px solid rgba(255, 255, 255, 0.3)",
+              borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '6px 6px 0 0'
+            }}>
+              <span style={{
+                color: '#fff',
+                fontSize: "0.85rem",
+                fontWeight: "normal",
+                opacity: 0.8
+              }}>
+                (Optional)
+              </span>
+              <div style={{
+                display: 'flex',
+                gap: '4px',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                borderRadius: '6px',
+                padding: '2px',
+                background: 'rgba(255, 255, 255, 0.15)'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playSound?.("next.mp3");
+                    setAdditionalFeedbackPreview(false);
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    background: !additionalFeedbackPreview ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
+                    color: !additionalFeedbackPreview ? '#fff' : 'rgba(255, 255, 255, 0.7)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  Raw
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playSound?.("next.mp3");
+                    setAdditionalFeedbackPreview(true);
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    background: additionalFeedbackPreview ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
+                    color: additionalFeedbackPreview ? '#fff' : 'rgba(255, 255, 255, 0.7)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  Preview
+                </button>
+              </div>
+            </div>
+            
             <textarea
               value={additionalFeedback}
               onChange={(e) => {
@@ -1134,19 +1306,45 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
               }}
               placeholder="Share any additional thoughts about the game..."
               style={{
-                width: '100%',
-                minHeight: '200px',
-                padding: '16px',
-                fontSize: '16px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                border: '2px solid rgba(255, 255, 255, 0.3)',
-                borderRadius: '8px',
-                color: 'white',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-                lineHeight: '1.5'
+                width: "100%",
+                minHeight: "80px",
+                padding: "12px",
+                fontSize: "14px",
+                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                border: "2px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "0 0 6px 6px",
+                borderTop: "none",
+                color: "white",
+                resize: "vertical",
+                fontFamily: "inherit",
+                lineHeight: "1.4",
+                display: additionalFeedbackPreview ? 'none' : 'block'
               }}
             />
+            
+            {/* Preview Div */}
+            {additionalFeedbackPreview && (
+              <div style={{
+                width: "100%",
+                minHeight: "80px",
+                padding: "12px",
+                fontSize: "14px",
+                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                border: "2px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "0 0 6px 6px",
+                borderTop: "none",
+                color: "white",
+                fontFamily: "inherit",
+                lineHeight: "1.4",
+                overflowWrap: "break-word"
+              }}>
+                {additionalFeedback.trim() ? (
+                  renderMarkdownText(additionalFeedback)
+                ) : (
+                  renderMarkdownText("Nothing to preview yet. Switch to ==Raw== to write your feedback.")
+                )}
+              </div>
+            )}
           </div>
           
           {/* Buttons */}
