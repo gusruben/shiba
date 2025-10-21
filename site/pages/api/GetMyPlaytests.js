@@ -232,20 +232,33 @@ async function getPlaytestsForUser(userId) {
                 
                 if (ownerData && ownerData.fields) {
                   gameDetails.ownerSlackId = ownerData.fields['slack id'] || '';
+                } else {
+                  console.log('Warning: Owner data missing for ownerId:', ownerId);
+                  gameDetails.ownerSlackId = '';
                 }
               } catch (error) {
-                // console.log('Error fetching owner details for:', ownerId, error.message);
+                console.log('Error fetching owner details for:', ownerId, error.message);
+                gameDetails.ownerSlackId = '';
               }
+            } else {
+              console.log('Warning: No owner ID found for game:', gameToTestId);
+              gameDetails.ownerSlackId = '';
             }
             
             // console.log('Fetched game details:', gameDetails);
           }
         } catch (error) {
-          // console.log('Error fetching game details for:', gameToTestId, error.message);
+          console.log('Error fetching game details for:', gameToTestId, error.message);
+          // Set default values when game details can't be fetched
+          gameDetails.gameName = playtest.fields.GameName || playtest.fields['Game Name'] || 'Unknown Game';
+          gameDetails.playableURL = '';
+          gameDetails.gameThumbnail = '';
+          gameDetails.gameAnimatedBackground = '';
+          gameDetails.ownerSlackId = '';
         }
       }
       
-      return {
+      const result = {
         id: playtest.id,
         playtestId: playtest.fields.PlaytestId || playtest.fields.PlaytestID || '',
         gameToTest: gameToTestId || '',
@@ -253,7 +266,26 @@ async function getPlaytestsForUser(userId) {
         createdAt: playtest.fields['Created At'] || playtest.createdTime,
         instructions: playtest.fields.Instructions || '',
         gameName: gameDetails.gameName || playtest.fields.GameName || playtest.fields['Game Name'] || '',
-        gameLink: gameDetails.playableURL || (Array.isArray(playtest.fields.GameLink) ? playtest.fields.GameLink[0] : playtest.fields.GameLink) || (Array.isArray(playtest.fields['Game Link']) ? playtest.fields['Game Link'][0] : playtest.fields['Game Link']) || '',
+        gameLink: (() => {
+          // Try multiple sources for game link in order of preference
+          const sources = [
+            gameDetails.playableURL,
+            Array.isArray(playtest.fields.GameLink) ? playtest.fields.GameLink[0] : playtest.fields.GameLink,
+            Array.isArray(playtest.fields['Game Link']) ? playtest.fields['Game Link'][0] : playtest.fields['Game Link'],
+            playtest.fields.GameURL,
+            playtest.fields['Game URL']
+          ];
+          
+          for (const source of sources) {
+            if (source && source.trim() !== '') {
+              return source;
+            }
+          }
+          
+          // Log when no game link is found
+          console.log('Warning: No game link found for playtest:', playtest.id, 'gameToTest:', gameToTestId);
+          return '';
+        })(),
         gameThumbnail: gameDetails.gameThumbnail || '',
         gameAnimatedBackground: gameDetails.gameAnimatedBackground || '',
         ownerSlackId: gameDetails.ownerSlackId || '',
@@ -267,6 +299,16 @@ async function getPlaytestsForUser(userId) {
         feedback: playtest.fields['Feedback'] || 0,
         playtimeSeconds: playtest.fields['Playtime Seconds'] || 0,
       };
+      
+      // Log warnings for missing critical fields
+      if (!result.ownerSlackId) {
+        console.log('Warning: Missing ownerSlackId for playtest:', playtest.id, 'gameToTest:', gameToTestId);
+      }
+      if (!result.gameLink) {
+        console.log('Warning: Missing gameLink for playtest:', playtest.id, 'gameToTest:', gameToTestId);
+      }
+      
+      return result;
     })
   );
   
