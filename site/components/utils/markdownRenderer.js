@@ -151,6 +151,82 @@ function MarkdownLineRenderer({ text, darkMode }) {
   );
 };
 
+function getListIndentLevel(line) {
+  const match = line.match(/^( *)([-*]|\d+\.)\s/);
+  if (!match) return -1;
+  return Math.floor(match[1].length / 4);
+}
+
+function buildNestedListStructure(lines) {
+  const items = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const level = getListIndentLevel(line);
+    const match = line.match(/^( *)([-*]|\d+\.)\s(.+)/);
+    
+    if (match) {
+      const content = match[3];
+      const isOrdered = /^\d+\./.test(match[2]);
+      
+      items.push({
+        level,
+        content,
+        isOrdered,
+        children: [],
+      });
+    }
+  }
+  
+  const root = { level: -1, children: [] };
+  const stack = [root];
+  
+  items.forEach(item => {
+    while (stack.length > 1 && stack[stack.length - 1].level >= item.level) {
+      stack.pop();
+    }
+    
+    const parent = stack[stack.length - 1];
+    parent.children.push(item);
+    stack.push(item);
+  });
+  
+  return root.children;
+}
+
+function renderNestedList(items, darkMode, keyPrefix = '') {
+  if (!items || items.length === 0) return null;
+  
+  const groups = [];
+  let currentGroup = null;
+  
+  items.forEach((item, idx) => {
+    if (!currentGroup || currentGroup.isOrdered !== item.isOrdered) {
+      currentGroup = { isOrdered: item.isOrdered, items: [] };
+      groups.push(currentGroup);
+    }
+    currentGroup.items.push(item);
+  });
+  
+  return groups.map((group, groupIdx) => {
+    const ListTag = group.isOrdered ? 'ol' : 'ul';
+    const listStyle = group.isOrdered 
+      ? { paddingLeft: '25px' }
+      : { paddingLeft: '25px', listStyleType: 'disc' };
+    
+    return (
+      <ListTag key={`${keyPrefix}-${groupIdx}`} style={listStyle}>
+        {group.items.map((item, itemIdx) => (
+          <li key={`${keyPrefix}-${groupIdx}-${itemIdx}`}>
+            <MarkdownLineRenderer text={item.content} darkMode={darkMode} />
+            {item.children.length > 0 && renderNestedList(item.children, darkMode, `${keyPrefix}-${groupIdx}-${itemIdx}`)}
+          </li>
+        ))}
+      </ListTag>
+    );
+  });
+}
+
 const GROUP_TYPES = {
   codeblock: {
     delimiter: '```',
@@ -162,7 +238,7 @@ const GROUP_TYPES = {
   },
   list: {
     delimiter: null,
-    matcher: (line) => /^[-*]\s/.test(line) || /^\d+\.\s/.test(line),
+    matcher: (line) => /^( *)([-*]|\d+\.)\s/.test(line),
     priority: 80,
     canContinue: (line, currentType) => currentType === 'list',
   },
@@ -196,16 +272,14 @@ const GROUP_RENDERERS = {
       </pre>
     );
   },
-  list: (group, groupIdx, darkMode) => (
-    <p key={groupIdx} style={{ marginBottom: '8px' }}>
-      {group.lines.map((line, i) => (
-        <span key={i}>
-          <MarkdownLineRenderer text={line} darkMode={darkMode} />
-          {i < group.lines.length - 1 && <br />}
-        </span>
-      ))}
-    </p>
-  ),
+  list: (group, groupIdx, darkMode) => {
+    const structure = buildNestedListStructure(group.lines);
+    return (
+      <div key={groupIdx} style={{ marginBottom: '8px' }}>
+        {renderNestedList(structure, darkMode, `list-${groupIdx}`)}
+      </div>
+    );
+  },
   blockquote: (group, groupIdx, darkMode) => (
     <blockquote key={groupIdx} style={{
       borderLeft: '3px solid #ff6fa5',
