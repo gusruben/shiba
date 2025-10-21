@@ -485,9 +485,17 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
               textAlign: "center", 
               padding: "2rem",
               color: "white",
-              fontSize: "clamp(0.875rem, 1.25rem, 1.5rem)"
+              fontSize: "clamp(0.875rem, 1.25rem, 1.5rem)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
             }}>
-              No posts found for this developer's journey.
+              <div>
+                No posts found for this developer's journey.
+              </div>
+              <div style={{ fontSize: "1rem", color: "#ff6fa5" }}>
+                Try to reload
+              </div>
             </div>
           )}
         </div>
@@ -967,62 +975,74 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
           </div>
 
           {/* Game Component */}
-          {playtestGame?.gameLink && (() => {
-            // Extract game ID from the URL like PostAttachmentRenderer does
-            let gameId = '';
-            const gameLink = Array.isArray(playtestGame.gameLink) ? playtestGame.gameLink[0] : playtestGame.gameLink;
-            if (gameLink) {
-              try {
-                const path = gameLink.startsWith('http') ? new URL(gameLink).pathname : gameLink;
-                const m = /\/play\/([^\/?#]+)/.exec(path);
-                gameId = m && m[1] ? decodeURIComponent(m[1]) : '';
-              } catch (_) {
-                gameId = '';
+          {playtestGame?.gameLink
+            ? (() => {
+              // Extract game ID from the URL like PostAttachmentRenderer does
+              let gameId = '';
+              const gameLink = Array.isArray(playtestGame.gameLink) ? playtestGame.gameLink[0] : playtestGame.gameLink;
+              if (gameLink) {
+                try {
+                  const path = gameLink.startsWith('http') ? new URL(gameLink).pathname : gameLink;
+                  const m = /\/play\/([^\/?#]+)/.exec(path);
+                  gameId = m && m[1] ? decodeURIComponent(m[1]) : '';
+                } catch (_) {
+                  gameId = '';
+                }
               }
-            }
-            
-            return gameId ? (
-              <div style={{
-                width: "100%",
-                maxWidth: "800px",
-                margin: "0 auto"
-              }}>
-                <PlayGameComponent
-                  gameId={gameId}
-                  gameName={playtestGame.gameName}
-                  thumbnailUrl={playtestGame.gameThumbnail}
-                  animatedBackground={playtestGame.gameAnimatedBackground || ''}
-                  token={token}
-                  onPlayCreated={async (play) => {
-                    try {
-                      const response = await fetch('/api/CreatePlay', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                          token: token || null, // Pass null for anonymous plays
-                          gameName: playtestGame.gameName || '' 
-                        })
-                      });
-                      
-                      const data = await response.json();
-                      if (response.ok && data?.ok) {
-                        console.log('Play created successfully:', data.play);
-                      } else {
-                        console.error('Failed to create play:', data.message);
+              
+              return gameId ? (
+                <div style={{
+                  width: "100%",
+                  maxWidth: "800px",
+                  margin: "0 auto"
+                }}>
+                  <PlayGameComponent
+                    gameId={gameId}
+                    gameName={playtestGame.gameName}
+                    thumbnailUrl={playtestGame.gameThumbnail}
+                    animatedBackground={playtestGame.gameAnimatedBackground || ''}
+                    token={token}
+                    onPlayCreated={async (play) => {
+                      try {
+                        const response = await fetch('/api/CreatePlay', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ 
+                            token: token || null, // Pass null for anonymous plays
+                            gameName: playtestGame.gameName || '' 
+                          })
+                        });
+                        
+                        const data = await response.json();
+                        if (response.ok && data?.ok) {
+                          console.log('Play created successfully:', data.play);
+                        } else {
+                          console.error('Failed to create play:', data.message);
+                        }
+                      } catch (error) {
+                        console.error('Error creating play:', error);
                       }
-                    } catch (error) {
-                      console.error('Error creating play:', error);
-                    }
-                  }}
-                  onGameStart={() => {
-                    // console.log('Game started!');
-                    // Start timer when game actually starts
-                    setGameStartTime(Date.now());
-                  }}
-                />
+                    }}
+                    onGameStart={() => {
+                      // console.log('Game started!');
+                      // Start timer when game actually starts
+                      setGameStartTime(Date.now());
+                    }}
+                  />
+                </div>
+              ) : null;
+            })()
+            : (
+              <div style={{ 
+                textAlign: "center", 
+                padding: "2rem",
+              }}>
+                <span style={{ fontSize: "1.25rem", color: "#ff6fa5" }}>
+                  Try to reload
+                </span>
               </div>
-            ) : null;
-          })()}
+            )
+          }
 
           {/* Rate Game Button */}
           {gameStartTime && (
