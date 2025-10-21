@@ -7,7 +7,9 @@ import RadarChart from "@/components/RadarChart";
 import { uploadGame as uploadGameUtil } from "@/components/utils/uploadGame";
 import { uploadMiscFile } from "@/components/utils/uploadMiscFile";
 import ArtlogPostForm from "@/components/ArtlogPostForm";
-import { renderMarkdownText } from "@/components/utils/markdownRenderer";
+import MarkdownRenderer from "@/components/utils/markdownRenderer";
+import MarkdownGuide from "@/components/MarkdownGuide";
+import ToggleComponent from "@/components/ToggleComponent";
 
 const PostAttachmentRenderer = dynamic(() => import('@/components/utils/PostAttachmentRenderer'), { ssr: false });
 
@@ -1867,7 +1869,7 @@ function DetailView({
                                       <div key={partIndex} style={{
                                         marginBottom: '8px'
                                       }}>
-                                        {renderMarkdownText(part)}
+                                        <MarkdownRenderer text={part} darkMode={false} />
                                       </div>
                                     );
                                   } else {
@@ -1901,7 +1903,7 @@ function DetailView({
                                           />
                                           <strong>{part.category}</strong>
                                         </div>
-                                        {renderMarkdownText(part.content)}
+                                        <MarkdownRenderer text={part.content} darkMode={false} />
                                       </div>
                                     );
                                   }
@@ -1910,7 +1912,7 @@ function DetailView({
                             );
                           } else {
                             // No categories found, display as regular text with markdown support
-                            return renderMarkdownText(feedback);
+                            return <MarkdownRenderer text={feedback} darkMode={false} />;
                           }
                         })()}
                       </div>
@@ -2615,56 +2617,29 @@ function DetailView({
           >
             <div style={{
               display: 'flex',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               padding: '8px 10px',
               borderBottom: '1px solid rgba(0, 0, 0, 0.12)',
+              borderRadius: '10px 10px 0 0',
               background: 'rgba(255, 255, 255, 0.65)'
             }}>
-              <div style={{
-                display: 'flex',
-                gap: '4px',
-                border: '1px solid rgba(0, 0, 0, 0.18)',
-                borderRadius: '6px',
-                padding: '2px',
-                background: 'rgba(255, 255, 255, 0.85)'
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setMarkdownPreviewMode(false)}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    fontWeight: '600',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    background: !markdownPreviewMode ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
-                    color: !markdownPreviewMode ? '#fff' : 'rgba(0, 0, 0, 0.7)',
-                    transition: 'all 0.2s ease'
+              <span style={{ fontSize: '14px', color: '#333' }}>
+                Write what you added here...
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MarkdownGuide />
+                <ToggleComponent
+                  textOff="Raw"
+                  textOn="Preview"
+                  isOn={markdownPreviewMode}
+                  setState={(value) => {
+                    if (value) {
+                      setMarkdownPreviewContent(postContent.trim() ? <MarkdownRenderer text={postContent} darkMode={false} /> : null);
+                    }
+                    setMarkdownPreviewMode(value);
                   }}
-                >
-                  Raw
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMarkdownPreviewContent(postContent.trim() ? renderMarkdownText(postContent) : null);
-                    setMarkdownPreviewMode(true);
-                  }}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    fontWeight: '600',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    background: markdownPreviewMode ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
-                    color: markdownPreviewMode ? '#fff' : 'rgba(0, 0, 0, 0.7)',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Preview
-                </button>
+                />
               </div>
             </div>
 
@@ -2674,7 +2649,7 @@ function DetailView({
               placeholder={
                 postType === "ship" && !isProfileComplete
                   ? `Complete missing profile fields to unlock demo posting: ${profileCompletionData.missingFields.join(", ")}`
-                  : "Write what you added here...\n\n(Basic Markdown supported!)"
+                  : "Basic Markdown supported!"
               }
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
@@ -2747,8 +2722,8 @@ function DetailView({
               }}
             >
               {markdownPreviewContent || (
-                <span style={{ opacity: 0.5, fontStyle: 'italic' }}>
-                  {renderMarkdownText("Nothing to preview yet. Switch to `Raw` to write your post.")}
+                <span style={{ opacity: 0.65, fontStyle: 'italic', fontSize: '14px' }}>
+                  <MarkdownRenderer text="Nothing to preview yet. Switch to `Raw` to write your post." darkMode={false} />
                 </span>
               )}
             </div>
@@ -3390,7 +3365,7 @@ function DetailView({
         .moments-composer {
           border: 1px solid rgba(0, 0, 0, 0.18);
           border-radius: 10px;
-          overflow: hidden;
+          overflow: visible;
           background: rgba(255, 255, 255, 0.75);
           transition:
             border-color 120ms ease,

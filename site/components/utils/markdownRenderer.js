@@ -1,182 +1,394 @@
 import React from 'react';
 
-// Markdown rendering function for one line (basic markdown support)
-export const renderMarkdownLine = (text) => {
-  if (!text) return text;
+function parseMarkdownSegments(text) {
+  if (!text) return [{ type: 'text', content: text }];
   
-  // Escape HTML tags
-  let result = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  const segments = [];
+  let remaining = text;
   
-  const isUnorderedList = /^[-*]\s/.test(result);
-  const isOrderedList = /^\d+\.\s/.test(result);
-  if (isUnorderedList) {
-    result = result.replace(/^[-*]\s/, '&nbsp;&nbsp;&nbsp;&nbsp;• ');
-  } else if (isOrderedList) {
-    result = result.replace(/^(\d+\.\s)/g, '&nbsp;&nbsp;&nbsp;&nbsp;$1');
-  }
+  const patterns = [
+    // Bold + Italic: ***text*** or ___text___
+    { regex: /\*\*\*(.+?)\*\*\*/g, type: 'bold-italic' },
+    { regex: /___(.+?)___/g, type: 'bold-italic' },
+    // Bold: **text** or __text__
+    { regex: /\*\*(.+?)\*\*/g, type: 'bold' },
+    { regex: /__(.+?)__/g, type: 'bold' },
+    // Italic: *text* or _text_
+    { regex: /\*(.+?)\*/g, type: 'italic' },
+    { regex: /_(.+?)_/g, type: 'italic' },
+    // Strikethrough: ~~text~~
+    { regex: /~~(.+?)~~/g, type: 'strikethrough' },
+    // Highlight: ==text==
+    { regex: /==(.+?)==/g, type: 'highlight' },
+    // Code: `code`
+    { regex: /`(.+?)`/g, type: 'code' },
+    // Links: [text](url)
+    { regex: /\[(.+?)\]\((.+?)\)/g, type: 'link' },
+  ];
   
-  // Bold: **text** or __text__
-  result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  result = result.replace(/__(.+?)__/g, '<strong>$1</strong>');
+  let position = 0;
+  const matches = [];
   
-  // Italic: *text* or _text_
-  result = result.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  result = result.replace(/_(.+?)_/g, '<em>$1</em>');
-  
-  // Bold + Italic: ***text*** or ___text___
-  result = result.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  result = result.replace(/___(.+?)___/g, '<strong><em>$1</em></strong>');
-  
-  // Strikethrough: ~~text~~
-  result = result.replace(/~~(.+?)~~/g, '<del style="opacity: 0.7;">$1</del>');
-  
-  // Highlight: ==text==
-  result = result.replace(/==(.+?)==/g, '<mark style="background-color: #fff694ff; padding: 2px 4px; border-radius: 3px;">$1</mark>');
-
-  // Code: `code`
-  result = result.replace(/`(.+?)`/g, '<code style="background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px; font-family: monospace; font-size: 0.9em;">$1</code>');
-  
-  // Links: [text](url)
-  result = result.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #ff6fa5; text-decoration: underline; font-weight: 500;">$1</a>');
-  
-  // Blockquote: > text (check for escaped &gt;)
-  if (result.startsWith('&gt; ')) {
-    result = result.substring(5);
-    result = `<blockquote style="border-left: 3px solid #ff6fa5; background: #ff6fa53b; padding-left: 12px; margin: 8px 0; opacity: 0.8; font-style: italic;">${result}</blockquote>`;
-  }
-  
-  // Horizontal rule: --- or ***
-  result = result.replace(/^---$/g, '<hr style="border: none; border-top: 1px solid rgba(0,0,0,0.2); margin: 12px 0;">');
-  result = result.replace(/^\*\*\*$/g, '<hr style="border: none; border-top: 1px solid rgba(0,0,0,0.2); margin: 12px 0;">');
-  
-  // Emoji shortcodes: :emoji:
-  const emojiMap = {
-    ':smile:': '😊', ':fire:': '🔥', ':star:': '⭐', ':check:': '✅',
-    ':x:': '❌', ':warning:': '⚠️', ':thumbsup:': '👍', ':thumbsdown:': '👎', ':eyes:': '👀',
-    ':rocket:': '🚀', ':sparkles:': '✨', ':tada:': '🎉', ':100:': '💯', ':thinking:': '🤔',
-    ':clap:': '👏', ':muscle:': '💪', ':brain:': '🧠', ':bug:': '🐛'
-  };
-  Object.keys(emojiMap).forEach(key => {
-    result = result.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), emojiMap[key]);
+  patterns.forEach(({ regex, type }) => {
+    const re = new RegExp(regex.source, regex.flags);
+    let match;
+    while ((match = re.exec(text)) !== null) {
+      matches.push({
+        type,
+        start: match.index,
+        end: match.index + match[0].length,
+        fullMatch: match[0],
+        content: match[1],
+        url: match[2],
+      });
+    }
   });
   
-  return <span dangerouslySetInnerHTML={{ __html: result }} />;
+  matches.sort((a, b) => a.start - b.start);
+  
+  const validMatches = [];
+  let lastEnd = 0;
+  matches.forEach(match => {
+    if (match.start >= lastEnd) {
+      validMatches.push(match);
+      lastEnd = match.end;
+    }
+  });
+  
+  position = 0;
+  validMatches.forEach(match => {
+    if (match.start > position) {
+      segments.push({
+        type: 'text',
+        content: text.substring(position, match.start),
+      });
+    }
+    
+    segments.push(match);
+    position = match.end;
+  });
+  
+  if (position < text.length) {
+    segments.push({
+      type: 'text',
+      content: text.substring(position),
+    });
+  }
+  
+  return segments.length > 0 ? segments : [{ type: 'text', content: text }];
 };
 
-// Render multiline markdown text
-export const renderMarkdownText = (text) => {
+function MarkdownSegment({ segment, darkMode }) {
+  const codeBg = darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const highlightBg = darkMode ? '#fff694ff' : '#fff694ff';
+  
+  switch (segment.type) {
+    case 'bold':
+      return <strong>{segment.content}</strong>;
+    
+    case 'italic':
+      return <em>{segment.content}</em>;
+    
+    case 'bold-italic':
+      return <strong><em>{segment.content}</em></strong>;
+    
+    case 'strikethrough':
+      return <del style={{ opacity: 0.7 }}>{segment.content}</del>;
+    
+    case 'highlight':
+      return (
+        <mark style={{
+          backgroundColor: highlightBg,
+          padding: '2px 4px',
+          borderRadius: '3px'
+        }}>
+          {segment.content}
+        </mark>
+      );
+    
+    case 'code':
+      return (
+        <code style={{
+          background: codeBg,
+          padding: '2px 4px',
+          borderRadius: '3px',
+          fontFamily: 'monospace'
+        }}>
+          {segment.content}
+        </code>
+      );
+    
+    case 'link':
+      return (
+        <a
+          href={segment.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: '#ff6fa5',
+            textDecoration: 'underline',
+            fontWeight: 500
+          }}
+        >
+          {segment.content}
+        </a>
+      );
+    
+    case 'text':
+    default:
+      return <span>{segment.content}</span>;
+  }
+};
+
+function MarkdownLineRenderer({ text, darkMode }) {
+  const segments = parseMarkdownSegments(text);
+  return (
+    <>
+      {segments.map((segment, i) => (
+        <MarkdownSegment key={i} segment={segment} darkMode={darkMode} />
+      ))}
+    </>
+  );
+};
+
+function getListIndentLevel(line) {
+  const match = line.match(/^( *)([-*]|\d+\.)\s/);
+  if (!match) return -1;
+  return Math.floor(match[1].length / 4);
+}
+
+function buildNestedListStructure(lines) {
+  const items = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const level = getListIndentLevel(line);
+    const match = line.match(/^( *)([-*]|\d+\.)\s(.+)/);
+    
+    if (match) {
+      const content = match[3];
+      const isOrdered = /^\d+\./.test(match[2]);
+      
+      items.push({
+        level,
+        content,
+        isOrdered,
+        children: [],
+      });
+    }
+  }
+  
+  const root = { level: -1, children: [] };
+  const stack = [root];
+  
+  items.forEach(item => {
+    while (stack.length > 1 && stack[stack.length - 1].level >= item.level) {
+      stack.pop();
+    }
+    
+    const parent = stack[stack.length - 1];
+    parent.children.push(item);
+    stack.push(item);
+  });
+  
+  return root.children;
+}
+
+function renderNestedList(items, darkMode, keyPrefix = '') {
+  if (!items || items.length === 0) return null;
+  
+  const groups = [];
+  let currentGroup = null;
+  
+  items.forEach((item, idx) => {
+    if (!currentGroup || currentGroup.isOrdered !== item.isOrdered) {
+      currentGroup = { isOrdered: item.isOrdered, items: [] };
+      groups.push(currentGroup);
+    }
+    currentGroup.items.push(item);
+  });
+  
+  return groups.map((group, groupIdx) => {
+    const ListTag = group.isOrdered ? 'ol' : 'ul';
+    const listStyle = group.isOrdered 
+      ? { paddingLeft: '25px' }
+      : { paddingLeft: '25px', listStyleType: 'disc' };
+    
+    return (
+      <ListTag key={`${keyPrefix}-${groupIdx}`} style={listStyle}>
+        {group.items.map((item, itemIdx) => (
+          <li key={`${keyPrefix}-${groupIdx}-${itemIdx}`}>
+            <MarkdownLineRenderer text={item.content} darkMode={darkMode} />
+            {item.children.length > 0 && renderNestedList(item.children, darkMode, `${keyPrefix}-${groupIdx}-${itemIdx}`)}
+          </li>
+        ))}
+      </ListTag>
+    );
+  });
+}
+
+const GROUP_TYPES = {
+  codeblock: {
+    delimiter: '```',
+    isStartDelimiter: (line) => line.trim() === '```',
+    isEndDelimiter: (line) => line.trim() === '```',
+    matcher: null,
+    priority: 100,
+    canContinue: (line, currentType) => currentType === 'codeblock',
+  },
+  list: {
+    delimiter: null,
+    matcher: (line) => /^( *)([-*]|\d+\.)\s/.test(line),
+    priority: 80,
+    canContinue: (line, currentType) => currentType === 'list',
+  },
+  blockquote: {
+    delimiter: null,
+    matcher: (line) => /^>\s/.test(line),
+    priority: 70,
+    canContinue: (line, currentType) => currentType === 'blockquote',
+  },
+  text: {
+    delimiter: null,
+    matcher: () => true,
+    priority: 0,
+    canContinue: () => false,
+  },
+};
+
+const GROUP_RENDERERS = {
+  codeblock: (group, groupIdx, darkMode) => {
+    const codeBlockBg = darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+    return (
+      <pre key={groupIdx} style={{ 
+        background: codeBlockBg, 
+        padding: '8px', 
+        borderRadius: '4px', 
+        overflowX: 'auto', 
+        fontFamily: 'monospace',
+        marginBottom: '8px'
+      }}>
+        {group.lines.join('\n')}
+      </pre>
+    );
+  },
+  list: (group, groupIdx, darkMode) => {
+    const structure = buildNestedListStructure(group.lines);
+    return (
+      <div key={groupIdx} style={{ marginBottom: '8px' }}>
+        {renderNestedList(structure, darkMode, `list-${groupIdx}`)}
+      </div>
+    );
+  },
+  blockquote: (group, groupIdx, darkMode) => (
+    <blockquote key={groupIdx} style={{
+      borderLeft: '3px solid #ff6fa5',
+      background: '#ff6fa53b',
+      paddingLeft: '12px',
+      margin: '8px 0',
+      opacity: 0.8,
+      fontStyle: 'italic'
+    }}>
+      {group.lines.map((line, i) => (
+        <span key={i}>
+          <MarkdownLineRenderer text={line.replace(/^>\s/, '')} darkMode={darkMode} />
+          {i < group.lines.length - 1 && <br />}
+        </span>
+      ))}
+    </blockquote>
+  ),
+  text: (group, groupIdx, darkMode) => 
+    group.lines.map((line, i) => (
+      <p key={`${groupIdx}-${i}`} style={{ marginBottom: '8px' }}>
+        <MarkdownLineRenderer text={line} darkMode={darkMode} />
+      </p>
+    )),
+};
+
+function getLineGroupType(line, currentGroupType, isDelimiterBlock) {
+  if (isDelimiterBlock) {
+    return currentGroupType;
+  }
+
+  const sortedTypes = Object.entries(GROUP_TYPES)
+    .sort(([, a], [, b]) => b.priority - a.priority);
+
+  for (const [type, config] of sortedTypes) {
+    if (config.delimiter) {
+      if (config.isStartDelimiter && config.isStartDelimiter(line)) {
+        return type;
+      }
+    } else if (config.matcher && config.matcher(line)) {
+      return type;
+    }
+  }
+
+  return 'text';
+}
+
+export default function MarkdownRenderer({ text, darkMode = false }) {
   if (!text) return null;
   
   const lines = text.split('\n');
   const groups = [];
   let currentGroup = [];
-  let isListGroup = false;
-  let isCodeBlock = false;
-  let codeBlockLines = [];
+  let currentGroupType = null;
+  let isDelimiterBlock = false;
+  let delimiterConfig = null;
   
   lines.forEach((line) => {
-    // Check for code block delimiters
-    if (line.trim() === '```') {
-      if (!isCodeBlock) {
-        // Starting code block
-        if (currentGroup.length > 0) {
-          groups.push({ type: isListGroup ? 'list' : 'text', lines: currentGroup });
-          currentGroup = [];
-          isListGroup = false;
-        }
-        isCodeBlock = true;
-        codeBlockLines = [];
-      } else {
-        // Ending code block
-        groups.push({ type: 'codeblock', lines: codeBlockLines });
-        codeBlockLines = [];
-        isCodeBlock = false;
+    if (currentGroupType && delimiterConfig && delimiterConfig.isEndDelimiter) {
+      if (delimiterConfig.isEndDelimiter(line)) {
+        groups.push({ type: currentGroupType, lines: currentGroup });
+        currentGroup = [];
+        currentGroupType = null;
+        isDelimiterBlock = false;
+        delimiterConfig = null;
+        return;
       }
+      
+      currentGroup.push(line);
       return;
     }
+
+    const lineType = getLineGroupType(line, currentGroupType, isDelimiterBlock);
+    const lineConfig = GROUP_TYPES[lineType];
     
-    // If inside code block, collect lines
-    if (isCodeBlock) {
-      codeBlockLines.push(line);
+    if (lineConfig.delimiter && lineConfig.isStartDelimiter && lineConfig.isStartDelimiter(line)) {
+      if (currentGroup.length > 0) {
+        groups.push({ type: currentGroupType, lines: currentGroup });
+      }
+      currentGroup = [];
+      currentGroupType = lineType;
+      isDelimiterBlock = true;
+      delimiterConfig = lineConfig;
       return;
     }
-    
-    const isListItem = /^[-*]\s/.test(line) || /^\d+\.\s/.test(line);
-    
-    if (isListItem) {
-      if (!isListGroup) {
-        // Starting a new list group
-        if (currentGroup.length > 0) {
-          groups.push({ type: 'text', lines: currentGroup });
-          currentGroup = [];
-        }
-        isListGroup = true;
-      }
+
+    const shouldContinue = currentGroupType && lineType === currentGroupType && GROUP_TYPES[currentGroupType].canContinue(line, currentGroupType);
+    if (shouldContinue) {
       currentGroup.push(line);
     } else {
-      if (isListGroup) {
-        // Ending a list group
-        groups.push({ type: 'list', lines: currentGroup });
-        currentGroup = [];
-        isListGroup = false;
+      if (currentGroup.length > 0) {
+        groups.push({ type: currentGroupType, lines: currentGroup });
       }
-      currentGroup.push(line);
+      currentGroup = [line];
+      currentGroupType = lineType;
     }
   });
   
-  // Push remaining group
   if (currentGroup.length > 0) {
-    groups.push({ type: isListGroup ? 'list' : 'text', lines: currentGroup });
-  }
-  
-  // If code block wasn't closed, add it as code anyway
-  if (codeBlockLines.length > 0) {
-    groups.push({ type: 'codeblock', lines: codeBlockLines });
+    groups.push({ type: currentGroupType, lines: currentGroup });
   }
   
   return (
     <div>
       {groups.map((group, groupIdx) => {
-        if (group.type === 'codeblock') {
-          // Render code block
-          return (
-            <pre key={groupIdx} style={{ 
-              background: 'rgba(0,0,0,0.1)', 
-              padding: '8px', 
-              borderRadius: '4px', 
-              overflowX: 'auto', 
-              fontFamily: 'monospace', 
-              fontSize: '0.9em',
-              marginBottom: '8px'
-            }}>
-              {group.lines.join('\n')}
-            </pre>
-          );
-        } else if (group.type === 'list') {
-          // Render list items in a single <p> with <br /> separators
-          return (
-            <p key={groupIdx} style={{ marginBottom: '8px' }}>
-              {group.lines.map((line, i) => (
-                <span key={i}>
-                  {renderMarkdownLine(line)}
-                  {i < group.lines.length - 1 && <br />}
-                </span>
-              ))}
-            </p>
-          );
-        } else {
-          // Render regular text lines
-          return group.lines.map((line, i) => (
-            <p key={`${groupIdx}-${i}`} style={{ marginBottom: '8px' }}>
-              {renderMarkdownLine(line)}
-            </p>
-          ));
+        const renderer = GROUP_RENDERERS[group.type];
+        if (renderer) {
+          return renderer(group, groupIdx, darkMode);
         }
+        return GROUP_RENDERERS.text(group, groupIdx, darkMode);
       })}
     </div>
   );

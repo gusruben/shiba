@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { renderMarkdownText } from "./markdownRenderer";
+import MarkdownRenderer from "./markdownRenderer";
 
 const PlayGameComponent = dynamic(() => import("@/components/utils/playGameComponent"), { ssr: false });
 
@@ -2796,9 +2796,9 @@ export default function PostAttachmentRenderer({ content, attachments, playLink,
         </div>
       ) : null}
       
-      
-      
-      <div style={{ fontSize: compact ? '18px' : 'inherit' }}>{renderMarkdownText(content || '')}</div>
+
+
+      <div style={{ fontSize: compact ? '18px' : 'inherit' }}><MarkdownRenderer text={content || ''} darkMode={false} /></div>
 
       {/* Shomato Button - only show if token and postId are provided */}
       {/* Removed as per edit hint */}
