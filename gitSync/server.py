@@ -3,6 +3,8 @@ import time
 import threading
 import signal
 import sys
+import atexit
+import psutil
 from datetime import datetime
 from flask import Flask, jsonify
 from dotenv import load_dotenv
@@ -31,11 +33,47 @@ sync_error = None
 sync_count = 0
 
 
+def cleanup_all_zombies():
+    """Aggressively clean up all zombie processes."""
+    print("\n  Cleaning up zombie processes...")
+    try:
+        # Clean up git processes
+        cleanup_git_processes()
+        
+        # Also clean up any other zombie processes
+        zombies_cleaned = 0
+        for proc in psutil.process_iter(['pid', 'name', 'status']):
+            try:
+                if proc.info['status'] == psutil.STATUS_ZOMBIE:
+                    print(f"  Found zombie process: PID {proc.info['pid']} ({proc.info['name']})")
+                    zombies_cleaned += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        
+        if zombies_cleaned > 0:
+            print(f"  Cleaned up {zombies_cleaned} zombie processes")
+        else:
+            print("  No zombie processes found")
+            
+    except Exception as e:
+        print(f"  Error during cleanup: {e}")
+
+
 def signal_handler(signum, frame):
     """Handle shutdown signals to cleanup processes."""
     print(f"\nReceived signal {signum}, cleaning up...")
-    cleanup_git_processes()
+    cleanup_all_zombies()
     sys.exit(0)
+
+
+def periodic_cleanup():
+    """Periodically clean up zombie processes during operation."""
+    while True:
+        time.sleep(30)  # Check every 30 seconds
+        try:
+            cleanup_all_zombies()
+        except Exception as e:
+            print(f"Error in periodic cleanup: {e}")
 
 
 def perform_full_sync():
@@ -110,41 +148,60 @@ def perform_full_sync():
     print(f"{'='*80}\n")
     
     # Clean up any hanging git processes after sync
-    cleanup_git_processes()
+    cleanup_all_zombies()
     
     return result
 
 
-def run_continuous_sync():
-    """Run continuous sync loop."""
+def run_single_sync_and_restart():
+    """Run a single sync cycle and then restart the server."""
     global is_sync_running, last_sync_time, last_sync_result, sync_error, sync_count
     
-    while True:
-        if is_sync_running:
-            time.sleep(1)
-            continue
+    is_sync_running = True
+    sync_count += 1
+    
+    try:
+        print(f"\n{'='*80}")
+        print(f"Starting sync #{sync_count} at {datetime.now().isoformat()}")
+        print(f"{'='*80}\n")
         
-        is_sync_running = True
-        sync_count += 1
+        result = perform_full_sync()
+        last_sync_result = result
+        last_sync_time = datetime.now()
+        sync_error = None
         
-        try:
-            result = perform_full_sync()
-            last_sync_result = result
-            last_sync_time = datetime.now()
-            sync_error = None
-            
-            # Wait before next sync
-            print(f"Waiting 60 seconds before next sync...\n")
-            time.sleep(60)
-            
-        except Exception as error:
-            sync_error = str(error)
-            print(f"❌ Sync #{sync_count} failed: {error}")
-            print(f"Retrying in 30 seconds...\n")
-            time.sleep(30)
+        print(f"\n{'='*80}")
+        print(f"Sync #{sync_count} completed successfully!")
+        print(f"Waiting 60 seconds before restart to prevent zombie accumulation...")
+        print(f"{'='*80}\n")
         
-        finally:
-            is_sync_running = False
+        # Clean up before restart
+        cleanup_all_zombies()
+        
+        # Wait before restart to prevent rapid cycling
+        time.sleep(60)
+        
+        print(f"Restarting server...")
+        # Restart the server
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+        
+    except Exception as error:
+        sync_error = str(error)
+        print(f"❌ Sync #{sync_count} failed: {error}")
+        print(f"Waiting 30 seconds before restart to prevent zombie accumulation...")
+        
+        # Clean up before restart even on error
+        cleanup_all_zombies()
+        
+        # Wait before restart to prevent rapid cycling
+        time.sleep(30)
+        
+        print(f"Restarting server...")
+        # Restart the server
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    
+    finally:
+        is_sync_running = False
 
 
 # Routes
@@ -210,14 +267,25 @@ if __name__ == '__main__':
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+    try:
+        signal.signal(signal.SIGHUP, signal_handler)
+    except AttributeError:
+        # SIGHUP not available on Windows
+        pass
     
-    # Start continuous sync in background thread
-    sync_thread = threading.Thread(target=run_continuous_sync, daemon=True)
+    # Register cleanup on exit
+    atexit.register(cleanup_all_zombies)
+    
+    # Start single sync cycle in background thread (will restart after completion)
+    sync_thread = threading.Thread(target=run_single_sync_and_restart, daemon=True)
     sync_thread.start()
     
     print(f"Starting gitSync server on port {PORT}")
-    print(f"Continuous sync enabled")
+    print(f"Single sync cycle enabled (will restart after completion)")
     print(f"Signal handlers registered for graceful shutdown")
+    
+    # Initial cleanup
+    cleanup_all_zombies()
     
     # Start Flask server
     app.run(host='0.0.0.0', port=PORT)
