@@ -7,6 +7,7 @@ import RadarChart from "@/components/RadarChart";
 import { uploadGame as uploadGameUtil } from "@/components/utils/uploadGame";
 import { uploadMiscFile } from "@/components/utils/uploadMiscFile";
 import ArtlogPostForm from "@/components/ArtlogPostForm";
+import { renderMarkdownText } from "@/components/utils/markdownRenderer";
 
 const PostAttachmentRenderer = dynamic(() => import('@/components/utils/PostAttachmentRenderer'), { ssr: false });
 
@@ -695,6 +696,9 @@ function DetailView({
   const [slackProfile, setSlackProfile] = useState(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const artlogFormRef = useRef(null);
+  const [markdownPreviewMode, setMarkdownPreviewMode] = useState(false); // Toggle for markdown preview
+  const [markdownPreviewContent, setMarkdownPreviewContent] = useState(null); // Cached preview content
+  
   const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50MB limit for misc files
   const totalAttachmentBytes = useMemo(
     () =>
@@ -1303,6 +1307,7 @@ function DetailView({
             />
             <textarea
               className="nice-textarea"
+              style={{ resize: 'vertical' }}
               rows={4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -1773,7 +1778,7 @@ function DetailView({
                 fontSize: 13,
                 color: "#555",
                 lineHeight: 1.5,
-                fontStyle: "italic"
+                // fontStyle: "italic"
               }}>
                 {game.Feedback.map((feedback, index) => {
                   // Skip rendering if feedback is empty, but keep original index for responses
@@ -1862,11 +1867,7 @@ function DetailView({
                                       <div key={partIndex} style={{
                                         marginBottom: '8px'
                                       }}>
-                                        {part.split('\n').map((line, i) => (
-                                          <p key={i} style={{ marginBottom: '8px' }}>
-                                            {line}
-                                          </p>
-                                        ))}
+                                        {renderMarkdownText(part)}
                                       </div>
                                     );
                                   } else {
@@ -1876,25 +1877,31 @@ function DetailView({
                                       'Art:': 'FeedbackArt.svg',
                                       'Creativity:': 'FeedbackCreativity.svg',
                                       'Audio:': 'FeedbackAudio.svg',
-                                      'Mood:': 'FeedbackMood.svg',
+                                      'Mood:': 'FeedbackMood.svg'
                                     }
                                     return (
                                       <div key={partIndex} style={{
                                         marginBottom: '8px',
                                         padding: '8px 10px 0px 10px',
-                                        border: '1px solid lightgray',
-                                        borderRadius: '6px'
+                                        border: '1px solid #ccc',
+                                        borderRadius: '4px'
                                       }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', height: '16px', marginBottom: '4px' }}>
-                                          <img src={categoryIcons[part.category] || ''} alt='' style={{ width: '16px', height: '16px', marginRight: '4px' }} />
+                                        <div style={{
+                                          height: '16px',
+                                          marginBottom: '4px',
+                                          display: 'flex',
+                                          alignItems: 'center'
+                                        }}>
+                                          <img src={categoryIcons[part.category] || ''} style={{
+                                              width: '16px',
+                                              height: '16px',
+                                              marginRight: '4px',
+                                              filter: 'invert(0.335)'
+                                            }}
+                                          />
                                           <strong>{part.category}</strong>
                                         </div>
-                                        {part.content.split('\n').map((line, i) => (
-                                          <p key={i} style={{ marginBottom: '8px' }}>
-                                            {line}
-                                            {i < part.content.split('\n').length - 1 ? <br /> : null}
-                                          </p>
-                                        ))}
+                                        {renderMarkdownText(part.content)}
                                       </div>
                                     );
                                   }
@@ -1902,8 +1909,8 @@ function DetailView({
                               </div>
                             );
                           } else {
-                            // No categories found, display as regular text
-                            return `"${feedback}"`;
+                            // No categories found, display as regular text with markdown support
+                            return renderMarkdownText(feedback);
                           }
                         })()}
                       </div>
@@ -1925,7 +1932,9 @@ function DetailView({
                             fontFamily: "inherit",
                             display: "flex",
                             alignItems: "center",
-                            gap: "4px"
+                            justifyContent: "center",
+                            gap: "4px",
+                            flex: "1"
                           }}
                           onClick={async () => {
                             const newResponse = currentResponse === "Like" ? null : "Like";
@@ -1980,7 +1989,9 @@ function DetailView({
                             fontFamily: "inherit",
                             display: "flex",
                             alignItems: "center",
-                            gap: "4px"
+                            justifyContent: "center",
+                            gap: "4px",
+                            flex: "1"
                           }}
                           onClick={async () => {
                             const newResponse = currentResponse === "Dislike" ? null : "Dislike";
@@ -2033,7 +2044,9 @@ function DetailView({
                             fontFamily: "inherit",
                             display: "flex",
                             alignItems: "center",
-                            gap: "4px"
+                            justifyContent: "center",
+                            gap: "4px",
+                            flex: "1"
                           }}
                           onClick={async () => {
                             if (currentResponse === "Report") {
@@ -2486,19 +2499,23 @@ function DetailView({
         <p style={{ fontSize: 12, opacity: 0.7 }}>
           Every 3–4 hours: post a Shiba Moment. Add a short note of what you
           added and a screenshot/GIF/video (up to 50MB).
+          <br />
+          <strong>Note:</strong> Any time above 4 hours will not be counted!
         </p>
         <br />
         <p style={{ fontSize: 12, opacity: 0.7 }}>
-          Every ~10 hours: ship a new demo. We'll try it, award play tickets
+          Max every 10 hours: ship a new demo. We'll try it, award play tickets
           based on your time, and send it to other hack clubbers in the
           community to playtest.
+          <br />
+          <strong>Note:</strong> Any time above 10 hours will not be counted!
         </p>
         <p
           style={{
             fontSize: 11,
             opacity: 0.6,
             fontStyle: "italic",
-            marginTop: 8,
+            marginTop: 16,
             marginBottom: 8,
           }}
         >
@@ -2596,12 +2613,68 @@ function DetailView({
               await uploadFilesToS3(incoming);
             }}
           >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              padding: '8px 10px',
+              borderBottom: '1px solid rgba(0, 0, 0, 0.12)',
+              background: 'rgba(255, 255, 255, 0.65)'
+            }}>
+              <div style={{
+                display: 'flex',
+                gap: '4px',
+                border: '1px solid rgba(0, 0, 0, 0.18)',
+                borderRadius: '6px',
+                padding: '2px',
+                background: 'rgba(255, 255, 255, 0.85)'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setMarkdownPreviewMode(false)}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    background: !markdownPreviewMode ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
+                    color: !markdownPreviewMode ? '#fff' : 'rgba(0, 0, 0, 0.7)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  Raw
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMarkdownPreviewContent(postContent.trim() ? renderMarkdownText(postContent) : null);
+                    setMarkdownPreviewMode(true);
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    background: markdownPreviewMode ? 'linear-gradient(180deg, #ff8ec3 0%, #ff6fa5 100%)' : 'transparent',
+                    color: markdownPreviewMode ? '#fff' : 'rgba(0, 0, 0, 0.7)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  Preview
+                </button>
+              </div>
+            </div>
+
+            {/* Textarea or Preview */}
             <textarea
               className="moments-textarea"
               placeholder={
                 postType === "ship" && !isProfileComplete
                   ? `Complete missing profile fields to unlock demo posting: ${profileCompletionData.missingFields.join(", ")}`
-                  : "Write what you added here..."
+                  : "Write what you added here...\n\n(Basic Markdown supported!)"
               }
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
@@ -2612,6 +2685,9 @@ function DetailView({
                   postType === "ship" && !isProfileComplete
                     ? "not-allowed"
                     : "text",
+                borderRadius: 0,
+                borderBottom: '1px solid rgba(0, 0, 0, 0.12)',
+                display: markdownPreviewMode ? 'none' : 'block'
               }}
               onPaste={async (e) => {
                 // Only handle image paste for moments, not ships
@@ -2656,6 +2732,26 @@ function DetailView({
                 // For non-image items, let the default paste behavior happen
               }}
             />
+            <div 
+              className="moments-textarea"
+              style={{
+                minHeight: '120px',
+                overflowY: 'auto',
+                padding: '10px',
+                background: 'rgba(255, 255, 255, 0.95)',
+                borderRadius: 0,
+                borderBottom: '1px solid rgba(0, 0, 0, 0.12)',
+                fontSize: '14px',
+                color: '#333',
+                display: markdownPreviewMode ? 'block' : 'none'
+              }}
+            >
+              {markdownPreviewContent || (
+                <span style={{ opacity: 0.5, fontStyle: 'italic' }}>
+                  {renderMarkdownText("Nothing to preview yet. Switch to `Raw` to write your post.")}
+                </span>
+              )}
+            </div>
             {/* Previews */}
             {Array.isArray(postFiles) && postFiles.length > 0 && (
               <div className="moments-previews">
@@ -3273,6 +3369,16 @@ function DetailView({
                         )
                       });
                     }}
+                    hoursSinceLastDemo={p.PlayLink === "" ? 0 : (() => {
+                      var sinceLastDemo = p.HoursSpent;
+                      for (let i = pIdx + 1; i < game.posts.length; i++) {
+                        const post = game.posts[i];
+                        if (post.PlayLink !== "")
+                          break;
+                        sinceLastDemo += post.HoursSpent;
+                      }
+                      return sinceLastDemo;
+                    })()}
                   />
                 </div>
               ))}
@@ -3358,8 +3464,6 @@ function DetailView({
           padding: 10px;
           outline: none;
           border: 0;
-          border-bottom: 1px solid rgba(0, 0, 0, 0.12);
-          border-radius: 10px 10px 0 0;
           background: transparent;
         }
         .moments-footer {
