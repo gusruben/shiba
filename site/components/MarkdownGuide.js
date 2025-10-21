@@ -45,6 +45,7 @@ export default function MarkdownGuide({ darkMode = false }) {
 
   const codeStyle = {
     background: theme.codeBg,
+    color: theme.text,
     padding: '0 4px',
     borderRadius: '4px'
   };
@@ -140,10 +141,25 @@ export default function MarkdownGuide({ darkMode = false }) {
               <br />
               <code style={codeStyle}>2. Second</code>
             </div>
+            <div>
+              <strong style={{ color: theme.text }}>Nested lists:</strong>
+              <br />
+              <div style={codeStyle}>
+                <div>- **Bold item**</div>
+                <div>- *Italic item*</div>
+                <div>&nbsp;&nbsp;&nbsp;&nbsp;- Nested with `code`</div>
+                <div>&nbsp;&nbsp;&nbsp;&nbsp;- Nested with [link](https://example.com)</div>
+                <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Deep nested with ==highlight==</div>
+              </div>
+            </div>
             <div style={{ marginTop: '4px' }}>
               <strong style={{ color: theme.text }}>Code block:</strong>
               <br />
-              <div style={codeStyle}>```<br />&nbsp;&nbsp;&nbsp;&nbsp;code here<br />```</div>
+              <div style={codeStyle}>
+                <div>```</div>
+                <div>&nbsp;&nbsp;&nbsp;&nbsp;code here</div>
+                <div>```</div>
+              </div>
             </div>
           </div>
         </div>
