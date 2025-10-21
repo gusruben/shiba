@@ -244,7 +244,7 @@ async function getPlaytestsForUser(userId) {
                 gameDetails.ownerSlackId = '';
               }
             } else {
-              console.log('Warning: No owner ID found for game:', gameToTestId);
+              console.log('Warning: No owner ID found for game:', gameToTestId, 'Game fields:', Object.keys(gameData.fields));
               gameDetails.ownerSlackId = '';
             }
             
