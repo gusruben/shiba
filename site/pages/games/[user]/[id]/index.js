@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import Head from 'next/head';
 import fs from 'fs';
 import path from 'path';
-import { renderMarkdownText } from '@/components/utils/markdownRenderer';
+import MarkdownRenderer from '@/components/utils/markdownRenderer';
 import MarkdownGuide from '@/components/MarkdownGuide';
 import ToggleComponent from '@/components/ToggleComponent';
 
@@ -349,7 +349,7 @@ function CommentsSection({ token, commentText, setCommentText, commentStarRating
               isOn={markdownPreviewMode}
               setState={(value) => {
                 if (value) {
-                  setMarkdownPreviewContent(commentText.trim() ? renderMarkdownText(commentText) : null);
+                  setMarkdownPreviewContent(commentText.trim() ? <MarkdownRenderer text={commentText} darkMode={false} /> : null);
                 }
                 setMarkdownPreviewMode(value);
               }}
@@ -396,7 +396,7 @@ function CommentsSection({ token, commentText, setCommentText, commentStarRating
         >
           {markdownPreviewContent || (
             <span style={{ opacity: 0.65, fontStyle: 'italic', fontSize: '14px' }}>
-              {renderMarkdownText("Nothing to preview yet. Switch to `Raw` to write your post.")}
+              <MarkdownRenderer text="Nothing to preview yet. Switch to `Raw` to write your post." darkMode={false} />
             </span>
           )}
         </div>
@@ -689,7 +689,7 @@ function CommentsSection({ token, commentText, setCommentText, commentStarRating
                         lineHeight: '1.4',
                         whiteSpace: 'pre-wrap'
                       }}>
-                        {renderMarkdownText(comment.message)}
+                        <MarkdownRenderer text={comment.message} darkMode={false} />
                       </div>
                     </div>
                   ))}
@@ -810,7 +810,7 @@ function JournalPostRenderer({ content, attachments, playLink, gameName, thumbna
       )}
 
       {/* Content */}
-      <div style={{ whiteSpace: 'pre-wrap' }}>{renderMarkdownText(content) || ''}</div>
+      <div style={{ whiteSpace: 'pre-wrap' }}><MarkdownRenderer text={content} darkMode={false} /></div>
 
       {/* Artlog-specific rendering */}
       {isArtlog && (

@@ -7,7 +7,7 @@ import RadarChart from "@/components/RadarChart";
 import { uploadGame as uploadGameUtil } from "@/components/utils/uploadGame";
 import { uploadMiscFile } from "@/components/utils/uploadMiscFile";
 import ArtlogPostForm from "@/components/ArtlogPostForm";
-import { renderMarkdownText } from "@/components/utils/markdownRenderer";
+import MarkdownRenderer from "@/components/utils/markdownRenderer";
 import MarkdownGuide from "@/components/MarkdownGuide";
 import ToggleComponent from "@/components/ToggleComponent";
 
@@ -1869,7 +1869,7 @@ function DetailView({
                                       <div key={partIndex} style={{
                                         marginBottom: '8px'
                                       }}>
-                                        {renderMarkdownText(part)}
+                                        <MarkdownRenderer text={part} darkMode={false} />
                                       </div>
                                     );
                                   } else {
@@ -1903,7 +1903,7 @@ function DetailView({
                                           />
                                           <strong>{part.category}</strong>
                                         </div>
-                                        {renderMarkdownText(part.content)}
+                                        <MarkdownRenderer text={part.content} darkMode={false} />
                                       </div>
                                     );
                                   }
@@ -1912,7 +1912,7 @@ function DetailView({
                             );
                           } else {
                             // No categories found, display as regular text with markdown support
-                            return renderMarkdownText(feedback);
+                            return <MarkdownRenderer text={feedback} darkMode={false} />;
                           }
                         })()}
                       </div>
@@ -2635,7 +2635,7 @@ function DetailView({
                   isOn={markdownPreviewMode}
                   setState={(value) => {
                     if (value) {
-                      setMarkdownPreviewContent(postContent.trim() ? renderMarkdownText(postContent) : null);
+                      setMarkdownPreviewContent(postContent.trim() ? <MarkdownRenderer text={postContent} darkMode={false} /> : null);
                     }
                     setMarkdownPreviewMode(value);
                   }}
@@ -2723,7 +2723,7 @@ function DetailView({
             >
               {markdownPreviewContent || (
                 <span style={{ opacity: 0.65, fontStyle: 'italic', fontSize: '14px' }}>
-                  {renderMarkdownText("Nothing to preview yet. Switch to `Raw` to write your post.")}
+                  <MarkdownRenderer text="Nothing to preview yet. Switch to `Raw` to write your post." darkMode={false} />
                 </span>
               )}
             </div>

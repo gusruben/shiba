@@ -1,7 +1,7 @@
 import React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { renderMarkdownText } from '@/components/utils/markdownRenderer';
+import MarkdownRenderer from '@/components/utils/markdownRenderer';
 import MarkdownGuide from '@/components/MarkdownGuide';
 import ToggleComponent from '@/components/ToggleComponent';
 
@@ -782,9 +782,9 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
                       overflowWrap: "break-word"
                     }}>
                       {ratingFeedback[category].trim() ? (
-                        renderMarkdownText(ratingFeedback[category])
+                        <MarkdownRenderer text={ratingFeedback[category]} darkMode={true} />
                       ) : (
-                        renderMarkdownText("Nothing to preview yet. Switch to ==Raw== to write your feedback.")
+                        <MarkdownRenderer text="Nothing to preview yet. Switch to `Raw` to write your feedback." darkMode={true} />
                       )}
                     </div>
                   )}
@@ -1260,9 +1260,9 @@ export default function PlaytestMode({ onExit, profile, playtestGame, playSound,
                 overflowWrap: "break-word"
               }}>
                 {additionalFeedback.trim() ? (
-                  renderMarkdownText(additionalFeedback)
+                  <MarkdownRenderer text={additionalFeedback} darkMode={true} />
                 ) : (
-                  renderMarkdownText("Nothing to preview yet. Switch to ==Raw== to write your feedback.")
+                  <MarkdownRenderer text="Nothing to preview yet. Switch to `Raw` to write your feedback." darkMode={true} />
                 )}
               </div>
             )}
