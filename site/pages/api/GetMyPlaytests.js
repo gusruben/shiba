@@ -114,204 +114,94 @@ async function getAllRecordsWithPagination(tableName, filterFormula = null) {
 
 async function getPlaytestsForUser(userId) {
   const userEscaped = safeEscapeFormulaString(userId);
-  // console.log('Looking for playtests for user:', userId);
-  
   let records = [];
   
-  // Method 1: Try direct comparison with the linked record
+  // Try Method 1: FIND with ARRAYJOIN (most reliable for linked records)
+  try {
+    const filterFormula = `FIND("${userEscaped}", ARRAYJOIN({Player}))`;
+    records = await getAllRecordsWithPagination(AIRTABLE_PLAYTESTS_TABLE, filterFormula);
+    if (records.length > 0) {
+      return await formatPlaytestRecords(records);
+    }
+  } catch (error) {
+    console.error('GetMyPlaytests Method 1 failed:', error.message);
+  }
+  
+  // Try Method 2: Direct comparison (works if Player field is single value)
   try {
     const filterFormula = `{Player} = "${userEscaped}"`;
-    // console.log('Trying filter formula 1:', filterFormula);
-    
     records = await getAllRecordsWithPagination(AIRTABLE_PLAYTESTS_TABLE, filterFormula);
-    // console.log('Method 1 results:', records.length);
+    if (records.length > 0) {
+      return await formatPlaytestRecords(records);
+    }
   } catch (error) {
-    // console.log('Method 1 failed:', error.message);
+    console.error('GetMyPlaytests Method 2 failed:', error.message);
   }
   
-  // If that doesn't work, try method 2
-  if (records.length === 0) {
-    try {
-      const filterFormula = `FIND("${userEscaped}", ARRAYJOIN({Player}))`;
-      // console.log('Trying filter formula 2:', filterFormula);
-      
-      records = await getAllRecordsWithPagination(AIRTABLE_PLAYTESTS_TABLE, filterFormula);
-      // console.log('Method 2 results:', records.length);
-    } catch (error) {
-      // console.log('Method 2 failed:', error.message);
+  // Method 3: Fetch all and filter client-side (fallback)
+  try {
+    const allRecords = await getAllRecordsWithPagination(AIRTABLE_PLAYTESTS_TABLE);
+    records = allRecords.filter(record => {
+      const player = record.fields.Player;
+      if (Array.isArray(player)) {
+        return player.includes(userId);
+      } else if (typeof player === 'string') {
+        return player === userId;
+      }
+      return false;
+    });
+    
+    if (records.length > 0) {
+      return await formatPlaytestRecords(records);
     }
+  } catch (error) {
+    console.error('GetMyPlaytests Method 3 failed:', error.message);
   }
   
-  // If still no results, try method 3 - get all and filter client-side
-  if (records.length === 0) {
-    try {
-      // console.log('Falling back to client-side filtering...');
-      const allRecords = await getAllRecordsWithPagination(AIRTABLE_PLAYTESTS_TABLE);
-      // console.log('Got all records:', allRecords.length);
-      
-      records = allRecords.filter(record => {
-        const player = record.fields['Player'];
-        // console.log('Checking record player field:', player, 'against userId:', userId);
-        
-        // Handle both array and single value cases
-        if (Array.isArray(player)) {
-          return player.includes(userId);
-        } else if (typeof player === 'string') {
-          return player === userId;
-        }
-        return false;
-      });
-      
-      // console.log('Method 3 (client-side) results:', records.length);
-    } catch (error) {
-      // console.log('Method 3 failed:', error.message);
-    }
-  }
-  
+  return [];
+}
+
+async function formatPlaytestRecords(records) {
   if (!records || records.length === 0) {
-    // console.log('No playtests found for user');
     return [];
   }
   
-  // Get game details for each playtest
-  const playtestsWithDetails = await Promise.all(
-    records.map(async (playtest) => {
-      // console.log('Playtest fields:', JSON.stringify(playtest.fields, null, 2));
-      
-      const gameToTestId = Array.isArray(playtest.fields.GameToTest) 
-        ? playtest.fields.GameToTest[0] 
-        : playtest.fields.GameToTest;
-      
-      let gameDetails = {
-        gameName: '',
-        gameThumbnail: '',
-        gameAnimatedBackground: '',
-        playableURL: ''
-      };
-      
-      // Fetch game details if we have a game ID
-      if (gameToTestId) {
-        try {
-          const gameData = await airtableRequest(`Games/${encodeURIComponent(gameToTestId)}`, {
-            method: 'GET',
-          });
-          
-          if (gameData && gameData.fields) {
-            gameDetails.gameName = gameData.fields.Name || '';
-            // Handle playable URL - it might be an array
-            if (Array.isArray(gameData.fields['Playable URL'])) {
-              gameDetails.playableURL = gameData.fields['Playable URL'][0] || '';
-            } else {
-              gameDetails.playableURL = gameData.fields['Playable URL'] || '';
-            }
-            
-            // Handle thumbnail - it might be an array of attachment objects
-            if (gameData.fields.Thumbnail && Array.isArray(gameData.fields.Thumbnail)) {
-              gameDetails.gameThumbnail = gameData.fields.Thumbnail[0]?.url || '';
-            } else if (typeof gameData.fields.Thumbnail === 'string') {
-              gameDetails.gameThumbnail = gameData.fields.Thumbnail;
-            }
-            
-            // Handle animated background - it might be an array of attachment objects
-            if (gameData.fields.AnimatedBackground && Array.isArray(gameData.fields.AnimatedBackground)) {
-              gameDetails.gameAnimatedBackground = gameData.fields.AnimatedBackground[0]?.url || '';
-            } else if (typeof gameData.fields.AnimatedBackground === 'string') {
-              gameDetails.gameAnimatedBackground = gameData.fields.AnimatedBackground;
-            }
-            
-            // Get the game owner's slack ID
-            const ownerId = Array.isArray(gameData.fields.Owner) 
-              ? gameData.fields.Owner[0] 
-              : gameData.fields.Owner;
-            
-            if (ownerId) {
-              try {
-                const ownerData = await airtableRequest(`Users/${encodeURIComponent(ownerId)}`, {
-                  method: 'GET',
-                });
-                
-                if (ownerData && ownerData.fields) {
-                  gameDetails.ownerSlackId = ownerData.fields['slack id'] || '';
-                } else {
-                  console.log('Warning: Owner data missing for ownerId:', ownerId);
-                  gameDetails.ownerSlackId = '';
-                }
-              } catch (error) {
-                console.log('Error fetching owner details for:', ownerId, error.message);
-                gameDetails.ownerSlackId = '';
-              }
-            } else {
-              console.log('Warning: No owner ID found for game:', gameToTestId);
-              gameDetails.ownerSlackId = '';
-            }
-            
-            // console.log('Fetched game details:', gameDetails);
-          }
-        } catch (error) {
-          console.log('Error fetching game details for:', gameToTestId, error.message);
-          // Set default values when game details can't be fetched
-          gameDetails.gameName = playtest.fields.GameName || playtest.fields['Game Name'] || 'Unknown Game';
-          gameDetails.playableURL = '';
-          gameDetails.gameThumbnail = '';
-          gameDetails.gameAnimatedBackground = '';
-          gameDetails.ownerSlackId = '';
-        }
-      }
-      
-      const result = {
-        id: playtest.id,
-        playtestId: playtest.fields.PlaytestId || playtest.fields.PlaytestID || '',
-        gameToTest: gameToTestId || '',
-        status: playtest.fields.status || 'Pending',
-        createdAt: playtest.fields['Created At'] || playtest.createdTime,
-        instructions: playtest.fields.Instructions || '',
-        gameName: gameDetails.gameName || playtest.fields.GameName || playtest.fields['Game Name'] || '',
-        gameLink: (() => {
-          // Try multiple sources for game link in order of preference
-          const sources = [
-            gameDetails.playableURL,
-            Array.isArray(playtest.fields.GameLink) ? playtest.fields.GameLink[0] : playtest.fields.GameLink,
-            Array.isArray(playtest.fields['Game Link']) ? playtest.fields['Game Link'][0] : playtest.fields['Game Link'],
-            playtest.fields.GameURL,
-            playtest.fields['Game URL']
-          ];
-          
-          for (const source of sources) {
-            if (source && source.trim() !== '') {
-              return source;
-            }
-          }
-          
-          // Log when no game link is found
-          console.log('Warning: No game link found for playtest:', playtest.id, 'gameToTest:', gameToTestId);
-          return '';
-        })(),
-        gameThumbnail: gameDetails.gameThumbnail || '',
-        gameAnimatedBackground: gameDetails.gameAnimatedBackground || '',
-        ownerSlackId: gameDetails.ownerSlackId || '',
-        HoursSpent: playtest.fields?.HoursSpent || 0,
-        // Rating data for completed playtests
-        funScore: playtest.fields['Fun Score'] || 0,
-        artScore: playtest.fields['Art Score'] || 0,
-        creativityScore: playtest.fields['Creativity Score'] || 0,
-        audioScore: playtest.fields['Audio Score'] || 0,
-        moodScore: playtest.fields['Mood Score'] || 0,
-        feedback: playtest.fields['Feedback'] || 0,
-        playtimeSeconds: playtest.fields['Playtime Seconds'] || 0,
-      };
-      
-      // Log warnings for missing critical fields
-      if (!result.ownerSlackId) {
-        console.log('Warning: Missing ownerSlackId for playtest:', playtest.id, 'gameToTest:', gameToTestId);
-      }
-      if (!result.gameLink) {
-        console.log('Warning: Missing gameLink for playtest:', playtest.id, 'gameToTest:', gameToTestId);
-      }
-      
-      return result;
-    })
-  );
-  
-  // console.log('Returning formatted playtests:', playtestsWithDetails.length);
-  return playtestsWithDetails;
+  // Map playtest records directly - no more nested lookups!
+  return records.map((playtest) => {
+    const fields = playtest.fields;
+    
+    // GameToTest is a linked record field (array of record IDs)
+    const gameToTestId = Array.isArray(fields.GameToTest) ? fields.GameToTest[0] : fields.GameToTest;
+    
+    // All these fields are now direct fields in PlaytestTickets (not lookups)
+    // Handle arrays from computed/lookup fields - take first element if array
+    const gameName = Array.isArray(fields['Game Name']) ? fields['Game Name'][0] : (fields['Game Name'] || '');
+    const gameLink = Array.isArray(fields.gameLink) ? fields.gameLink[0] : (fields.gameLink || '');
+    const gameThumbnail = Array.isArray(fields.gameThumbnail) ? fields.gameThumbnail[0] : (fields.gameThumbnail || '');
+    const gameAnimatedBackground = Array.isArray(fields.gameAnimatedBackground) ? fields.gameAnimatedBackground[0] : (fields.gameAnimatedBackground || '');
+    const ownerSlackId = Array.isArray(fields.ownerSlackId) ? fields.ownerSlackId[0] : (fields.ownerSlackId || '');
+    
+    return {
+      id: playtest.id,
+      playtestId: fields.PlaytestId || '',
+      gameToTest: gameToTestId || '',
+      status: fields.status || 'Pending',
+      createdAt: fields['Created At'] || playtest.createdTime,
+      instructions: fields.Instructions || '',
+      gameName,
+      gameLink,
+      gameThumbnail,
+      gameAnimatedBackground,
+      ownerSlackId,
+      HoursSpent: fields.HoursSpent || 0,
+      // Rating data for completed playtests
+      funScore: fields['Fun Score'] || 0,
+      artScore: fields['Art Score'] || 0,
+      creativityScore: fields['Creativity Score'] || 0,
+      audioScore: fields['Audio Score'] || 0,
+      moodScore: fields['Mood Score'] || 0,
+      feedback: fields.Feedback || '',
+      playtimeSeconds: fields['Playtime Seconds'] || 0,
+    };
+  });
 }
