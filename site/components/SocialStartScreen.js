@@ -1900,6 +1900,67 @@ export default function SocialStartScreen({ games: initialGames = [], gamesError
                             )}
                           </div>
                           
+                          {/* See Journey Section */}
+                          <div
+                            className="see-journey-container"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const url = `https://shiba.hackclub.dev/games/${slackId}/${encodeURIComponent(gameName || '')}`;
+                              window.open(url, '_blank', 'noopener,noreferrer');
+                              logSpecificActivity('see_journey_click', {
+                                gameId: game.id,
+                                gameName: gameName,
+                                slackId: slackId,
+                                url: url
+                              });
+                            }}
+                            style={{
+                              width: "100%",
+                              border: "1px solid #000",
+                              borderTop: "none",
+                              padding: "0px",
+                              marginTop: "-24px", 
+                              opacity: 0.1,
+                              zIndex: 0,
+                              textAlign: "center",
+                              borderRadius: "0px 0px 12px 12px",
+                              transition: "opacity 0.2s",
+                              cursor: "pointer"
+                            }}
+                          >
+                            <p
+                              className="see-journey-text"
+                              style={{
+                                margin: 0,
+                                fontSize: "10px",
+                                textDecoration: "none",
+                                marginTop: "16px",
+                                marginBottom: "6px",
+                                color: theme.text,
+                                transition: "text-decoration 0.15s, opacity 0.2s"
+                              }}
+                            >
+                              See Journey
+                            </p>
+                             <style>{`
+                               .see-journey-container:hover {
+                                 opacity: 0.7 !important;
+                                 cursor: pointer !important;
+                               }
+                               .see-journey-container:hover .see-journey-text {
+                                 text-decoration: underline !important;
+                               }
+                               @media (max-width: 768px) {
+                                 .see-journey-container {
+                                   opacity: 0.7 !important;
+                                 }
+                                 .see-journey-text {
+                                   text-decoration: underline !important;
+                                 }
+                               }
+                             `}</style>
+                          </div>
+                          
                           {/* Creator Info */}
                           {game.creatorDisplayName && (
                             <div 
