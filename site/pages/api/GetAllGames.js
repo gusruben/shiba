@@ -166,7 +166,7 @@ export default async function handler(req, res) {
             return {
               slackId,
               displayName: profileData.displayName || '',
-              image: profileData.image || '',
+              image: profileData.imageUrl || profileData.image || '',
             };
           } catch (error) {
             console.error(`[GetAllGames] Error fetching profile for ${slackId}:`, error);
@@ -293,7 +293,7 @@ export default async function handler(req, res) {
             return {
               slackId,
               displayName: profileData.displayName || '',
-              image: profileData.image || '',
+              image: profileData.imageUrl || profileData.image || '',
             };
           } catch (error) {
             console.error(`[GetAllGames] Error fetching profile for ${slackId}:`, error);

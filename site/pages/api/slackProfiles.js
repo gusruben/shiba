@@ -23,10 +23,10 @@ export default async function handler(req, res) {
     const response = await fetch(`https://cachet.dunkirk.sh/users/${encodeURIComponent(slackId)}`);
     const profileData = await response.json().catch(() => ({}));
     
-    if (profileData && (profileData.displayName || profileData.image)) {
+    if (profileData && (profileData.displayName || profileData.imageUrl)) {
       const profile = {
         displayName: profileData.displayName || '',
-        image: profileData.image || '',
+        image: profileData.imageUrl || '',
         slackId: slackId,
         cachedAt: Date.now()
       };

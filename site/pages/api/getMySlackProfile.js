@@ -83,8 +83,8 @@ export default async function handler(req, res) {
       const profileData = await response.json().catch(() => ({}));
       
       // Sanitize response data
-      const sanitizedImage = typeof profileData.image === 'string' && profileData.image.startsWith('http') 
-        ? profileData.image 
+      const sanitizedImage = typeof profileData.imageUrl === 'string' && profileData.imageUrl.startsWith('http') 
+        ? profileData.imageUrl 
         : '';
       const sanitizedDisplayName = typeof profileData.displayName === 'string' 
         ? profileData.displayName.slice(0, 100) // Limit display name length
