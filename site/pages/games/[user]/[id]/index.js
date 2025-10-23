@@ -11,7 +11,7 @@ import ToggleComponent from '@/components/ToggleComponent';
 const PlayGameComponent = dynamic(() => import('@/components/utils/playGameComponent'), { ssr: false });
 
 // Commit Graph Component - GitHub-style contribution graph
-function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
+function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs, animatedDevHours, animatedArtHours, animatedPlaysCount }) {
   const startDate = new Date('2025-08-18'); // Start date (Sunday)
   const cutoffDate = new Date('2025-11-12'); // Date up until which to show dark grey
   const today = new Date();
@@ -212,6 +212,7 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
                   <div
                     key={`${weekIndex}-${dayIndex}`}
                     onClick={() => handleCellClick(day.date)}
+                    className={day.level > 0 ? "commit-cell" : ""}
                     style={{
                       width: '10px',
                       height: '10px',
@@ -219,7 +220,10 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
                       border: '0.5px solid rgba(27, 31, 36, 0.06)',
                       borderRadius: '2px',
                       cursor: 'pointer',
-                      transition: 'transform 0.1s ease'
+                      transition: 'transform 0.1s ease',
+                      animation: day.level > 0 ? `fadeInScale 0.3s ease-out ${(weekIndex * 7 + dayIndex) * 0.03}s both` : 'none',
+                      transformOrigin: 'center',
+                      opacity: day.level > 0 ? 0 : 1
                     }}
                     onMouseEnter={(e) => {
                       e.target.style.transform = 'scale(1.1)';
@@ -285,21 +289,9 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
             fontSize: '12px',
             color: '#666'
           }}>
-            {(() => {
-              const devlogPosts = gameData?.posts?.filter(post => post.postType !== 'artlog') || [];
-              const artlogPosts = gameData?.posts?.filter(post => post.postType === 'artlog') || [];
-              const devHours = devlogPosts.reduce((sum, post) => sum + (post.HoursSpent || 0), 0);
-              const artHours = artlogPosts.reduce((sum, post) => sum + (post.timeSpentOnAsset || 0), 0);
-              const playsCount = gameData?.playsCount || 0;
-              
-              return (
-                <>
-                  <div>• {devHours.toFixed(0)} Hours Spent Dev</div>
-                  <div>• {artHours.toFixed(0)} Hours Spent Art</div>
-                  <div>• {playsCount} Plays on Shiba</div>
-                </>
-              );
-            })()}
+            <div>• {animatedDevHours.toFixed(0)} Hours Spent Dev</div>
+            <div>• {animatedArtHours.toFixed(0)} Hours Spent Art</div>
+            <div>• {animatedPlaysCount} Plays on Shiba</div>
           </div>
         )}
     </div>
@@ -1564,6 +1556,89 @@ export default function GamesPage({ gameData, error }) {
   const [commentStarRating, setCommentStarRating] = useState(0);
   const [localFeedback, setLocalFeedback] = useState([]);
   const [gameStarted, setGameStarted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [animatedDevHours, setAnimatedDevHours] = useState(0);
+  const [animatedArtHours, setAnimatedArtHours] = useState(0);
+  const [animatedPlaysCount, setAnimatedPlaysCount] = useState(0);
+
+  // Detect mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Animate counters in sequence after git commits
+  useEffect(() => {
+    if (!gameData?.posts) return;
+
+    const devlogPosts = gameData.posts.filter(post => post.postType !== 'artlog');
+    const artlogPosts = gameData.posts.filter(post => post.postType === 'artlog');
+    const devHoursTotal = devlogPosts.reduce((sum, post) => sum + (post.HoursSpent || 0), 0);
+    const artHoursTotal = artlogPosts.reduce((sum, post) => sum + (post.timeSpentOnAsset || 0), 0);
+    const playsTotal = gameData?.playsCount || 0;
+
+    // Calculate git commit animation duration
+    const posts = gameData.posts || [];
+    let maxCellIndex = 0;
+    posts.forEach(post => {
+      if (post.createdAt) {
+        const postDate = new Date(post.createdAt);
+        const startDate = new Date('2025-08-18');
+        const daysDiff = Math.floor((postDate - startDate) / (1000 * 3600 * 24));
+        if (daysDiff >= 0) {
+          maxCellIndex = Math.max(maxCellIndex, daysDiff);
+        }
+      }
+    });
+    const commitAnimationDuration = maxCellIndex * 0.03 * 1000 + 300; // Convert to ms, add animation duration
+
+    const animationDuration = 1000; // 1 second for each counter
+    const steps = 50;
+
+    // Function to animate a counter
+    const animateCounter = (targetValue, setterFunction, isInteger = false) => {
+      return new Promise((resolve) => {
+        const increment = targetValue / steps;
+        let count = 0;
+        const interval = setInterval(() => {
+          count++;
+          const currentValue = increment * count;
+          if (isInteger) {
+            setterFunction(Math.min(Math.floor(currentValue), targetValue));
+          } else {
+            setterFunction(Math.min(currentValue, targetValue));
+          }
+          if (count >= steps) {
+            clearInterval(interval);
+            setterFunction(targetValue);
+            resolve();
+          }
+        }, animationDuration / steps);
+      });
+    };
+
+    // Chain animations sequentially
+    const runAnimations = async () => {
+      // Wait for git commits to finish
+      await new Promise(resolve => setTimeout(resolve, commitAnimationDuration));
+      
+      // Animate devlog hours
+      await animateCounter(devHoursTotal, setAnimatedDevHours, false);
+      
+      // Animate artlog hours (waits for devlog to finish)
+      await animateCounter(artHoursTotal, setAnimatedArtHours, false);
+      
+      // Animate plays count (waits for artlog to finish)
+      await animateCounter(playsTotal, setAnimatedPlaysCount, true);
+    };
+
+    runAnimations();
+  }, [gameData]);
 
   // Handle new comment submission
   const handleCommentSubmitted = (newComment) => {
@@ -1748,7 +1823,7 @@ export default function GamesPage({ gameData, error }) {
         <meta property="twitter:description" content={pageDescription} />
         <meta property="twitter:image" content={gameImage} />
       </Head>
-      <div className={gameStarted ? 'mobile-game-started' : ''} style={{
+      <div className={gameStarted && isMobile ? 'mobile-game-started' : ''} style={{
         width: '100%', 
         alignItems: "center", 
         height: '100%', 
@@ -2024,87 +2099,109 @@ export default function GamesPage({ gameData, error }) {
           </div>
 
           {/* Mobile Arcade WASD Controls */}
-          {gameStarted && (
-            <div className="mobile-arcade-controls">
-              {/* W Button */}
-              <button
-                className="arcade-button arcade-w"
-                onTouchStart={() => {
-                  const iframe = document.querySelector('iframe[title*="Play"]');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'keydown', key: 'w' }, '*');
-                  }
-                }}
-                onTouchEnd={() => {
-                  const iframe = document.querySelector('iframe[title*="Play"]');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'keyup', key: 'w' }, '*');
-                  }
-                }}
-              >
-                W
-              </button>
+          {gameStarted && isMobile && (
+            <>
+              <div className="mobile-arcade-controls">
+                {/* W Button */}
+                <button
+                  className="arcade-button arcade-w"
+                  onTouchStart={() => {
+                    const iframe = document.querySelector('iframe[title*="Play"]');
+                    if (iframe?.contentWindow) {
+                      iframe.contentWindow.postMessage({ type: 'keydown', key: 'w' }, '*');
+                    }
+                  }}
+                  onTouchEnd={() => {
+                    const iframe = document.querySelector('iframe[title*="Play"]');
+                    if (iframe?.contentWindow) {
+                      iframe.contentWindow.postMessage({ type: 'keyup', key: 'w' }, '*');
+                    }
+                  }}
+                >
+                  W
+                </button>
 
-              {/* A Button */}
-              <button
-                className="arcade-button arcade-a"
-                onTouchStart={() => {
-                  const iframe = document.querySelector('iframe[title*="Play"]');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'keydown', key: 'a' }, '*');
-                  }
-                }}
-                onTouchEnd={() => {
-                  const iframe = document.querySelector('iframe[title*="Play"]');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'keyup', key: 'a' }, '*');
-                  }
-                }}
-              >
-                A
-              </button>
+                {/* A Button */}
+                <button
+                  className="arcade-button arcade-a"
+                  onTouchStart={() => {
+                    const iframe = document.querySelector('iframe[title*="Play"]');
+                    if (iframe?.contentWindow) {
+                      iframe.contentWindow.postMessage({ type: 'keydown', key: 'a' }, '*');
+                    }
+                  }}
+                  onTouchEnd={() => {
+                    const iframe = document.querySelector('iframe[title*="Play"]');
+                    if (iframe?.contentWindow) {
+                      iframe.contentWindow.postMessage({ type: 'keyup', key: 'a' }, '*');
+                    }
+                  }}
+                >
+                  A
+                </button>
 
-              {/* S Button */}
-              <button
-                className="arcade-button arcade-s"
-                onTouchStart={() => {
-                  const iframe = document.querySelector('iframe[title*="Play"]');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'keydown', key: 's' }, '*');
-                  }
-                }}
-                onTouchEnd={() => {
-                  const iframe = document.querySelector('iframe[title*="Play"]');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'keyup', key: 's' }, '*');
-                  }
-                }}
-              >
-                S
-              </button>
+                {/* S Button */}
+                <button
+                  className="arcade-button arcade-s"
+                  onTouchStart={() => {
+                    const iframe = document.querySelector('iframe[title*="Play"]');
+                    if (iframe?.contentWindow) {
+                      iframe.contentWindow.postMessage({ type: 'keydown', key: 's' }, '*');
+                    }
+                  }}
+                  onTouchEnd={() => {
+                    const iframe = document.querySelector('iframe[title*="Play"]');
+                    if (iframe?.contentWindow) {
+                      iframe.contentWindow.postMessage({ type: 'keyup', key: 's' }, '*');
+                    }
+                  }}
+                >
+                  S
+                </button>
 
-              {/* D Button */}
-              <button
-                className="arcade-button arcade-d"
-                onTouchStart={() => {
-                  const iframe = document.querySelector('iframe[title*="Play"]');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'keydown', key: 'd' }, '*');
-                  }
-                }}
-                onTouchEnd={() => {
-                  const iframe = document.querySelector('iframe[title*="Play"]');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'keyup', key: 'd' }, '*');
-                  }
-                }}
-              >
-                D
-              </button>
-            </div>
+                {/* D Button */}
+                <button
+                  className="arcade-button arcade-d"
+                  onTouchStart={() => {
+                    const iframe = document.querySelector('iframe[title*="Play"]');
+                    if (iframe?.contentWindow) {
+                      iframe.contentWindow.postMessage({ type: 'keydown', key: 'd' }, '*');
+                    }
+                  }}
+                  onTouchEnd={() => {
+                    const iframe = document.querySelector('iframe[title*="Play"]');
+                    if (iframe?.contentWindow) {
+                      iframe.contentWindow.postMessage({ type: 'keyup', key: 'd' }, '*');
+                    }
+                  }}
+                >
+                  D
+                </button>
+              </div>
+              
+              {/* WIP Notice */}
+              <div style={{
+                border: '1px solid white',
+                padding: '8px 12px',
+                marginTop: '12px',
+                borderRadius: '6px',
+                textAlign: 'center',
+                maxWidth: '300px',
+                margin: '12px auto 0'
+              }}>
+                <p style={{
+                  color: 'white',
+                  fontSize: '12px',
+                  fontStyle: 'italic',
+                  margin: 0
+                }}>
+                  (The buttons are a W.I.P feature and are not currently functional)
+                </p>
+              </div>
+            </>
           )}
 
-          {!gameStarted && (
+          {!(gameStarted && isMobile) && (
             <>
           {gameData?.description && (
             <p style={{marginTop: 16, marginBottom: 8}}>{gameData.description}</p>
@@ -2115,6 +2212,9 @@ export default function GamesPage({ gameData, error }) {
             gameData={gameData} 
             setSelectedView={setSelectedView}
             setExpandedDevlogs={setExpandedDevlogs}
+            animatedDevHours={animatedDevHours}
+            animatedArtHours={animatedArtHours}
+            animatedPlaysCount={animatedPlaysCount}
           />
 
           {/* View Selector with Paw and Feedback Buttons */}
@@ -2154,15 +2254,11 @@ export default function GamesPage({ gameData, error }) {
               >
                 <span className="desktop-text">Devlogs</span>
                 <span className="mobile-text">Dev</span>
-                {Array.isArray(gameData?.posts) && gameData.posts.length > 0 && (() => {
-                  const devlogPosts = gameData.posts.filter(post => post.postType !== 'artlog');
-                  const totalHours = devlogPosts.reduce((sum, post) => sum + (post.HoursSpent || 0), 0);
-                  return totalHours > 0 ? (
-                    <span className="hours-text" style={{ marginLeft: "6px", opacity: 0.8 }}>
-                      ({totalHours.toFixed(2)} hours)
-                    </span>
-                  ) : null;
-                })()}
+                {animatedDevHours > 0 && (
+                  <span className="hours-text" style={{ marginLeft: "6px", opacity: 0.8 }}>
+                    ({animatedDevHours.toFixed(2)} hours)
+                  </span>
+                )}
               </button>
               
               <button
@@ -2182,15 +2278,11 @@ export default function GamesPage({ gameData, error }) {
               >
                 <span className="desktop-text">Artlogs</span>
                 <span className="mobile-text">Art</span>
-                {Array.isArray(gameData?.posts) && gameData.posts.length > 0 && (() => {
-                  const artlogPosts = gameData.posts.filter(post => post.postType === 'artlog');
-                  const totalHours = artlogPosts.reduce((sum, post) => sum + (post.timeSpentOnAsset || 0), 0);
-                  return totalHours > 0 ? (
-                    <span className="hours-text" style={{ marginLeft: "6px", opacity: 0.8 }}>
-                      ({totalHours.toFixed(2)} hours)
-                    </span>
-                  ) : null;
-                })()}
+                {animatedArtHours > 0 && (
+                  <span className="hours-text" style={{ marginLeft: "6px", opacity: 0.8 }}>
+                    ({animatedArtHours.toFixed(2)} hours)
+                  </span>
+                )}
               </button>
               
               <button
@@ -2211,7 +2303,7 @@ export default function GamesPage({ gameData, error }) {
                 <span className="desktop-text">Plays</span>
                 <span className="mobile-text">Plays</span>
                 <span className="desktop-count-text" style={{ marginLeft: "6px", opacity: 0.8 }}>
-                  ({gameData?.playsCount || 0})
+                  ({animatedPlaysCount})
                 </span>
               </button>
             </div>
@@ -3018,7 +3110,7 @@ export default function GamesPage({ gameData, error }) {
         </div>
 
         {/* Comments Section - appears for both Devlogs and Artlogs */}
-        {!gameStarted && gameData && (
+        {!(gameStarted && isMobile) && gameData && (
           <CommentsSection
             token={token}
             commentText={commentText}
@@ -3047,6 +3139,22 @@ export default function GamesPage({ gameData, error }) {
       )}
 
       <style jsx>{`
+        /* Commit graph cell fade in animation */
+        @keyframes fadeInScale {
+          from {
+            opacity: 0;
+            transform: scale(0);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        .commit-cell {
+          opacity: 0;
+        }
+
         /* Chat bubble button animations */
         .chat-bubble-button {
           transition: transform 0.1s ease;
