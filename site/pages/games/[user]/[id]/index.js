@@ -360,13 +360,16 @@ function CommentsSection({ token, commentText, setCommentText, commentStarRating
   }, [feedback]);
   return (
     <div className="comments-container" style={{
-      maxWidth: "640px",
+      maxWidth: screenWidth <= 768 ? "calc(100vw - 16px)" : "640px",
+      width: screenWidth <= 768 ? "calc(100% - 16px)" : "auto",
       border: "1px solid rgba(0, 0, 0, 0.18)",
       borderRadius: "10px",
       background: "rgba(255, 255, 255, 0.8)",
       padding: "16px",
       marginTop: "16px",
       marginBottom: "16px",
+      marginLeft: screenWidth <= 768 ? "8px" : "auto",
+      marginRight: screenWidth <= 768 ? "8px" : "auto",
     }}>
       <h3 style={{
         fontSize: '16px',
@@ -3305,6 +3308,8 @@ export default function GamesPage({ gameData, error }) {
           .comments-container {
             margin-left: 8px;
             margin-right: 8px;
+            max-width: calc(100vw - 32px) !important;
+            width: calc(100% - 16px) !important;
           }
           
           /* Hide desktop text and show mobile text on mobile */
@@ -3377,6 +3382,13 @@ export default function GamesPage({ gameData, error }) {
           }
           
           .comments-container {
+            width: calc(100% - 16px) !important;
+            max-width: calc(100vw - 32px) !important;
+          }
+          
+          /* Override inline styles on mobile */
+          div[class*="comments-container"][style*="maxWidth"] {
+            max-width: calc(100vw - 32px) !important;
             width: calc(100% - 16px) !important;
           }
 
