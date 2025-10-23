@@ -62,39 +62,75 @@ func MainGamePlayHandler() http.HandlerFunc {
 (function() {
 	const activeKeys = new Set();
 	
+	// Key code mappings
+	const keyCodes = {
+		'w': 87,
+		'a': 65,
+		's': 83,
+		'd': 68
+	};
+	
+	console.log('[Virtual Keyboard] Listener initialized');
+	
 	window.addEventListener('message', function(event) {
-		if (!event.data || !event.data.type || !event.data.key) return;
+		console.log('[Virtual Keyboard] Message received:', event.data);
+		
+		if (!event.data || !event.data.type || !event.data.key) {
+			console.log('[Virtual Keyboard] Invalid message data');
+			return;
+		}
 		
 		const eventType = event.data.type; // 'keydown' or 'keyup'
 		const key = event.data.key.toLowerCase();
+		const keyCode = keyCodes[key] || key.charCodeAt(0);
+		
+		console.log('[Virtual Keyboard] Processing:', eventType, key, keyCode);
 		
 		// Prevent duplicate keydown events
 		if (eventType === 'keydown') {
-			if (activeKeys.has(key)) return;
+			if (activeKeys.has(key)) {
+				console.log('[Virtual Keyboard] Key already active:', key);
+				return;
+			}
 			activeKeys.add(key);
 		} else if (eventType === 'keyup') {
 			activeKeys.delete(key);
 		}
 		
-		// Create and dispatch keyboard event
+		// Create and dispatch keyboard event with multiple property formats
 		const keyboardEvent = new KeyboardEvent(eventType, {
 			key: key,
 			code: 'Key' + key.toUpperCase(),
-			keyCode: key.charCodeAt(0) - 32, // Simple keyCode mapping
-			which: key.charCodeAt(0) - 32,
+			keyCode: keyCode,
+			which: keyCode,
+			charCode: keyCode,
 			bubbles: true,
-			cancelable: true
+			cancelable: true,
+			composed: true
 		});
 		
+		console.log('[Virtual Keyboard] Dispatching event:', keyboardEvent);
+		
+		// Dispatch to multiple targets
 		document.dispatchEvent(keyboardEvent);
 		window.dispatchEvent(keyboardEvent);
+		document.body?.dispatchEvent(keyboardEvent);
 		
 		// Also try dispatching to canvas if it exists (common in games)
 		const canvas = document.querySelector('canvas');
 		if (canvas) {
 			canvas.dispatchEvent(keyboardEvent);
+			console.log('[Virtual Keyboard] Dispatched to canvas');
+		}
+		
+		// Try dispatching to the active element
+		if (document.activeElement && document.activeElement !== document.body) {
+			document.activeElement.dispatchEvent(keyboardEvent);
+			console.log('[Virtual Keyboard] Dispatched to active element:', document.activeElement);
 		}
 	});
+	
+	console.log('[Virtual Keyboard] Ready to receive messages');
 })();
 </script>
 `
@@ -218,39 +254,75 @@ func AssetsPlayHandler() http.HandlerFunc {
 (function() {
 	const activeKeys = new Set();
 	
+	// Key code mappings
+	const keyCodes = {
+		'w': 87,
+		'a': 65,
+		's': 83,
+		'd': 68
+	};
+	
+	console.log('[Virtual Keyboard] Listener initialized');
+	
 	window.addEventListener('message', function(event) {
-		if (!event.data || !event.data.type || !event.data.key) return;
+		console.log('[Virtual Keyboard] Message received:', event.data);
+		
+		if (!event.data || !event.data.type || !event.data.key) {
+			console.log('[Virtual Keyboard] Invalid message data');
+			return;
+		}
 		
 		const eventType = event.data.type; // 'keydown' or 'keyup'
 		const key = event.data.key.toLowerCase();
+		const keyCode = keyCodes[key] || key.charCodeAt(0);
+		
+		console.log('[Virtual Keyboard] Processing:', eventType, key, keyCode);
 		
 		// Prevent duplicate keydown events
 		if (eventType === 'keydown') {
-			if (activeKeys.has(key)) return;
+			if (activeKeys.has(key)) {
+				console.log('[Virtual Keyboard] Key already active:', key);
+				return;
+			}
 			activeKeys.add(key);
 		} else if (eventType === 'keyup') {
 			activeKeys.delete(key);
 		}
 		
-		// Create and dispatch keyboard event
+		// Create and dispatch keyboard event with multiple property formats
 		const keyboardEvent = new KeyboardEvent(eventType, {
 			key: key,
 			code: 'Key' + key.toUpperCase(),
-			keyCode: key.charCodeAt(0) - 32, // Simple keyCode mapping
-			which: key.charCodeAt(0) - 32,
+			keyCode: keyCode,
+			which: keyCode,
+			charCode: keyCode,
 			bubbles: true,
-			cancelable: true
+			cancelable: true,
+			composed: true
 		});
 		
+		console.log('[Virtual Keyboard] Dispatching event:', keyboardEvent);
+		
+		// Dispatch to multiple targets
 		document.dispatchEvent(keyboardEvent);
 		window.dispatchEvent(keyboardEvent);
+		document.body?.dispatchEvent(keyboardEvent);
 		
 		// Also try dispatching to canvas if it exists (common in games)
 		const canvas = document.querySelector('canvas');
 		if (canvas) {
 			canvas.dispatchEvent(keyboardEvent);
+			console.log('[Virtual Keyboard] Dispatched to canvas');
+		}
+		
+		// Try dispatching to the active element
+		if (document.activeElement && document.activeElement !== document.body) {
+			document.activeElement.dispatchEvent(keyboardEvent);
+			console.log('[Virtual Keyboard] Dispatched to active element:', document.activeElement);
 		}
 	});
+	
+	console.log('[Virtual Keyboard] Ready to receive messages');
 })();
 </script>
 `
