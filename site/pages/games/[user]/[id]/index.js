@@ -15,6 +15,20 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
   const startDate = new Date('2025-08-18'); // Start date (Sunday)
   const cutoffDate = new Date('2025-11-12'); // Date up until which to show dark grey
   const today = new Date();
+  const [screenWidth, setScreenWidth] = useState(0);
+
+  // Track screen width
+  useEffect(() => {
+    const handleResize = () => {
+      setScreenWidth(window.innerWidth);
+    };
+    
+    // Set initial width
+    handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Calculate weeks since start date up to cutoff
   const timeDiff = cutoffDate.getTime() - startDate.getTime();
@@ -124,7 +138,8 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
       borderRadius: "10px",
       background: "rgba(255, 255, 255, 0.8)",
       padding: "16px",
-      marginTop: "16px"
+      marginTop: "16px",
+      position: "relative"
     }}>
 
       
@@ -255,6 +270,38 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs }) {
         </div>
         <span>More</span>
       </div>
+      
+        {/* Mobile stats - positioned relative to entire commit graph container */}
+        {screenWidth <= 768 && (
+          <div className="mobile-stats" style={{
+            position: 'absolute',
+            top: '50%',
+            right: '16px',
+            transform: 'translateY(-50%)',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '4px',
+            fontSize: '12px',
+            color: '#666'
+          }}>
+            {(() => {
+              const devlogPosts = gameData?.posts?.filter(post => post.postType !== 'artlog') || [];
+              const artlogPosts = gameData?.posts?.filter(post => post.postType === 'artlog') || [];
+              const devHours = devlogPosts.reduce((sum, post) => sum + (post.HoursSpent || 0), 0);
+              const artHours = artlogPosts.reduce((sum, post) => sum + (post.timeSpentOnAsset || 0), 0);
+              const playsCount = gameData?.playsCount || 0;
+              
+              return (
+                <>
+                  <div>• {devHours.toFixed(0)} Hours Spent Dev</div>
+                  <div>• {artHours.toFixed(0)} Hours Spent Art</div>
+                  <div>• {playsCount} Plays on Shiba</div>
+                </>
+              );
+            })()}
+          </div>
+        )}
     </div>
   );
 }
@@ -264,6 +311,20 @@ function CommentsSection({ token, commentText, setCommentText, commentStarRating
   const [feedbackWithProfiles, setFeedbackWithProfiles] = useState([]);
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState(false); // Toggle for markdown preview
   const [markdownPreviewContent, setMarkdownPreviewContent] = useState(null); // Cached preview content
+  const [screenWidth, setScreenWidth] = useState(0);
+
+  // Track screen width
+  useEffect(() => {
+    const handleResize = () => {
+      setScreenWidth(window.innerWidth);
+    };
+    
+    // Set initial width
+    handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Fetch profile data for feedback creators
   useEffect(() => {
@@ -308,15 +369,14 @@ function CommentsSection({ token, commentText, setCommentText, commentStarRating
     fetchProfiles();
   }, [feedback]);
   return (
-    <div style={{
-      width: "100%",
-      maxWidth: "800px",
+    <div className="comments-container" style={{
+      maxWidth: "640px",
       border: "1px solid rgba(0, 0, 0, 0.18)",
       borderRadius: "10px",
       background: "rgba(255, 255, 255, 0.8)",
       padding: "16px",
       marginTop: "16px",
-      marginBottom: "16px"
+      marginBottom: "16px",
     }}>
       <h3 style={{
         fontSize: '16px',
@@ -342,7 +402,7 @@ function CommentsSection({ token, commentText, setCommentText, commentStarRating
             Leave a comment...
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <MarkdownGuide />
+            {screenWidth > 768 && <MarkdownGuide />}
             <ToggleComponent
               textOff="Raw"
               textOn="Preview"
@@ -1503,6 +1563,7 @@ export default function GamesPage({ gameData, error }) {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [commentStarRating, setCommentStarRating] = useState(0);
   const [localFeedback, setLocalFeedback] = useState([]);
+  const [gameStarted, setGameStarted] = useState(false);
 
   // Handle new comment submission
   const handleCommentSubmitted = (newComment) => {
@@ -1524,6 +1585,8 @@ export default function GamesPage({ gameData, error }) {
     displayName: gameData.creatorDisplayName || '',
     image: gameData.creatorImage || '',
   } : null;
+
+  // Native HTML marquee handles the scrolling automatically - no JavaScript needed
 
   // Load pawed status from server (only for logged-in users)
   useEffect(() => {
@@ -1685,7 +1748,7 @@ export default function GamesPage({ gameData, error }) {
         <meta property="twitter:description" content={pageDescription} />
         <meta property="twitter:image" content={gameImage} />
       </Head>
-      <div style={{
+      <div className={gameStarted ? 'mobile-game-started' : ''} style={{
         width: '100%', 
         alignItems: "center", 
         height: '100%', 
@@ -1711,7 +1774,7 @@ export default function GamesPage({ gameData, error }) {
           zIndex: 1
         }} />
                 <div style={{ position: 'relative', zIndex: 2, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{width: "100%", maxWidth: 800}}>
+          <div className="game-page-container" style={{width: "100%", maxWidth: 800}}>
             <div style={{
               display: "flex",
               alignItems: "center",
@@ -1725,71 +1788,168 @@ export default function GamesPage({ gameData, error }) {
               <div style={{
                 display: "flex",
                 alignItems: "center",
-                padding: "6px 12px",
+                padding: "2px 0px",
                 backgroundColor: "rgba(255, 255, 255, 0.9)",
                 borderRadius: "8px",
                 border: "1px solid #666",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-                flexWrap: "wrap",
+                flexWrap: "nowrap",
                 gap: "8px",
-                fontSize: "14px"
+                fontSize: "14px",
+                overflow: "hidden",
+                maxWidth: "400px",
+                position: "relative"
               }}>
-                <a 
-                  href="https://shiba.hackclub.com/games/list"
+                {/* Desktop breadcrumbs - normal static display */}
+                <div className="desktop-breadcrumb" style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  whiteSpace: "nowrap"
+                }}>
+                  <a 
+                    href="https://shiba.hackclub.com/games/list"
+                    style={{
+                      textDecoration: "none",
+                      color: "inherit",
+                      cursor: "pointer",
+                      borderBottom: "1px solid #ccc",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    <span>Shiba Games</span>
+                  </a>
+                  <span style={{ color: "#666", whiteSpace: "nowrap" }}>/</span>
+                  <a 
+                    href={`https://hackclub.slack.com/team/${user}`}
+                    style={{
+                      textDecoration: "none",
+                      color: "inherit",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px"
+                    }}>
+                      <div
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 6,
+                          border: '1px solid rgba(0,0,0,0.18)',
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                          backgroundColor: '#fff',
+                          backgroundImage: slackProfile?.image ? `url(${slackProfile.image})` : 'none',
+                          flexShrink: 0
+                        }}
+                      />
+                      <span style={{ borderBottom: "1px solid #ccc" }}>{slackProfile?.displayName || user}</span>
+                    </div>
+                  </a>
+                  <span style={{ color: "#666", whiteSpace: "nowrap" }}>/</span>
+                  <a 
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.location.reload();
+                    }}
+                    style={{
+                      textDecoration: "none",
+                      color: "inherit",
+                      cursor: "pointer",
+                      borderBottom: "1px solid #ccc",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    <span>{gameData?.name || 'Game Name'}</span>
+                  </a>
+                </div>
+
+                {/* Mobile breadcrumb content with native HTML marquee */}
+                <marquee
+                  className="mobile-breadcrumb"
+                  behavior="scroll"
+                  direction="left"
+                  scrollamount="1"
+                  scrolldelay="30"
                   style={{
-                    textDecoration: "none",
-                    color: "inherit",
-                    cursor: "pointer",
-                    borderBottom: "1px solid #ccc"
+                    width: "100%",
+                    height: "100%",
+                    display: "inline-block",
+                    whiteSpace: "nowrap"
                   }}
                 >
-                  <span>Shiba Games</span>
-                </a>
-                <span style={{ color: "#666" }}>/</span>
-                <a 
-                  href={`https://hackclub.slack.com/team/${user}`}
-                  style={{
-                    textDecoration: "none",
-                    color: "inherit",
-                    cursor: "pointer"
-                  }}
-                >
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px"
-                  }}>
-                    <div
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 6,
-                        border: '1px solid rgba(0,0,0,0.18)',
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                        backgroundColor: '#fff',
-                        backgroundImage: slackProfile?.image ? `url(${slackProfile.image})` : 'none',
-                      }}
-                    />
-                    <span style={{ borderBottom: "1px solid #ccc" }}>{slackProfile?.displayName || user}</span>
-                  </div>
-                </a>
-                <span style={{ color: "#666" }}>/</span>
-                <a 
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.location.reload();
-                  }}
-                  style={{
-                    textDecoration: "none",
-                    color: "inherit",
-                    cursor: "pointer",
-                    borderBottom: "1px solid #ccc"
-                  }}
-                >
-                  <span>{gameData?.name || 'Game Name'}</span>
-                </a>
+                  {/* Repeat the breadcrumb content multiple times for seamless marquee */}
+                  {Array.from({ length: 10 }, (_, index) => (
+                    <span key={index} style={{ display: "inline-flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap", marginRight: "8px" }}>
+                      <a 
+                        href="https://shiba.hackclub.com/games/list"
+                        style={{
+                          textDecoration: "none",
+                          color: "inherit",
+                          cursor: "pointer",
+                          borderBottom: "1px solid #ccc",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        <span>Shiba Games</span>
+                      </a>
+                      <span style={{ color: "#666", whiteSpace: "nowrap" }}>/</span>
+                      <a 
+                        href={`https://hackclub.slack.com/team/${user}`}
+                        style={{
+                          textDecoration: "none",
+                          color: "inherit",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        <div style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px"
+                        }}>
+                          <div
+                            style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: 6,
+                              border: '1px solid rgba(0,0,0,0.18)',
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                              backgroundColor: '#fff',
+                              backgroundImage: slackProfile?.image ? `url(${slackProfile.image})` : 'none',
+                              flexShrink: 0
+                            }}
+                          />
+                          <span style={{ borderBottom: "1px solid #ccc" }}>{slackProfile?.displayName || user}</span>
+                        </div>
+                      </a>
+                      <span style={{ color: "#666", whiteSpace: "nowrap" }}>/</span>
+                      <a 
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          window.location.reload();
+                        }}
+                        style={{
+                          textDecoration: "none",
+                          color: "inherit",
+                          cursor: "pointer",
+                          borderBottom: "1px solid #ccc",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        <span>{gameData?.name || 'Game Name'}</span>
+                      </a>
+                      <span style={{ color: "#666", whiteSpace: "nowrap" }}>/</span>
+                    </span>
+                  ))}
+                </marquee>
               </div>
 
               {/* Right side - Version dropdown */}
@@ -1853,6 +2013,7 @@ export default function GamesPage({ gameData, error }) {
                   animatedBackground={gameData?.animatedBackground || ''}
                   width="100%"
                   gamePageUrl={`https://shiba.hackclub.com/games/${user}/${encodeURIComponent(gameData?.name || id)}`}
+                  onGameStart={() => setGameStarted(true)}
                 />
               ) : (
                 <div style={{ aspectRatio: '16 / 9', border: "1px solid #000", width: '100%', maxWidth: '1152px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -1861,6 +2022,90 @@ export default function GamesPage({ gameData, error }) {
               );
             })()}
           </div>
+
+          {/* Mobile Arcade WASD Controls */}
+          {gameStarted && (
+            <div className="mobile-arcade-controls">
+              {/* W Button */}
+              <button
+                className="arcade-button arcade-w"
+                onTouchStart={() => {
+                  const iframe = document.querySelector('iframe[title*="Play"]');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'keydown', key: 'w' }, '*');
+                  }
+                }}
+                onTouchEnd={() => {
+                  const iframe = document.querySelector('iframe[title*="Play"]');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'keyup', key: 'w' }, '*');
+                  }
+                }}
+              >
+                W
+              </button>
+
+              {/* A Button */}
+              <button
+                className="arcade-button arcade-a"
+                onTouchStart={() => {
+                  const iframe = document.querySelector('iframe[title*="Play"]');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'keydown', key: 'a' }, '*');
+                  }
+                }}
+                onTouchEnd={() => {
+                  const iframe = document.querySelector('iframe[title*="Play"]');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'keyup', key: 'a' }, '*');
+                  }
+                }}
+              >
+                A
+              </button>
+
+              {/* S Button */}
+              <button
+                className="arcade-button arcade-s"
+                onTouchStart={() => {
+                  const iframe = document.querySelector('iframe[title*="Play"]');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'keydown', key: 's' }, '*');
+                  }
+                }}
+                onTouchEnd={() => {
+                  const iframe = document.querySelector('iframe[title*="Play"]');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'keyup', key: 's' }, '*');
+                  }
+                }}
+              >
+                S
+              </button>
+
+              {/* D Button */}
+              <button
+                className="arcade-button arcade-d"
+                onTouchStart={() => {
+                  const iframe = document.querySelector('iframe[title*="Play"]');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'keydown', key: 'd' }, '*');
+                  }
+                }}
+                onTouchEnd={() => {
+                  const iframe = document.querySelector('iframe[title*="Play"]');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'keyup', key: 'd' }, '*');
+                  }
+                }}
+              >
+                D
+              </button>
+            </div>
+          )}
+
+          {!gameStarted && (
+            <>
           {gameData?.description && (
             <p style={{marginTop: 16, marginBottom: 8}}>{gameData.description}</p>
           )}
@@ -1907,12 +2152,13 @@ export default function GamesPage({ gameData, error }) {
                   transition: "all 0.2s ease"
                 }}
               >
-                Devlogs
+                <span className="desktop-text">Devlogs</span>
+                <span className="mobile-text">Dev</span>
                 {Array.isArray(gameData?.posts) && gameData.posts.length > 0 && (() => {
                   const devlogPosts = gameData.posts.filter(post => post.postType !== 'artlog');
                   const totalHours = devlogPosts.reduce((sum, post) => sum + (post.HoursSpent || 0), 0);
                   return totalHours > 0 ? (
-                    <span style={{ marginLeft: "6px", opacity: 0.8 }}>
+                    <span className="hours-text" style={{ marginLeft: "6px", opacity: 0.8 }}>
                       ({totalHours.toFixed(2)} hours)
                     </span>
                   ) : null;
@@ -1934,12 +2180,13 @@ export default function GamesPage({ gameData, error }) {
                   transition: "all 0.2s ease"
                 }}
               >
-                Artlogs
+                <span className="desktop-text">Artlogs</span>
+                <span className="mobile-text">Art</span>
                 {Array.isArray(gameData?.posts) && gameData.posts.length > 0 && (() => {
                   const artlogPosts = gameData.posts.filter(post => post.postType === 'artlog');
                   const totalHours = artlogPosts.reduce((sum, post) => sum + (post.timeSpentOnAsset || 0), 0);
                   return totalHours > 0 ? (
-                    <span style={{ marginLeft: "6px", opacity: 0.8 }}>
+                    <span className="hours-text" style={{ marginLeft: "6px", opacity: 0.8 }}>
                       ({totalHours.toFixed(2)} hours)
                     </span>
                   ) : null;
@@ -1961,8 +2208,9 @@ export default function GamesPage({ gameData, error }) {
                   transition: "all 0.2s ease"
                 }}
               >
-                Plays
-                <span style={{ marginLeft: "6px", opacity: 0.8 }}>
+                <span className="desktop-text">Plays</span>
+                <span className="mobile-text">Plays</span>
+                <span className="desktop-count-text" style={{ marginLeft: "6px", opacity: 0.8 }}>
                   ({gameData?.playsCount || 0})
                 </span>
               </button>
@@ -2765,10 +3013,12 @@ export default function GamesPage({ gameData, error }) {
               )}
             </>
           )}
+            </>
+          )}
         </div>
 
         {/* Comments Section - appears for both Devlogs and Artlogs */}
-        {gameData && (
+        {!gameStarted && gameData && (
           <CommentsSection
             token={token}
             commentText={commentText}
@@ -2823,6 +3073,158 @@ export default function GamesPage({ gameData, error }) {
           transition: opacity 0.3s ease;
         }
 
+        /* Default: hide mobile stats and show desktop elements */
+        .mobile-stats {
+          display: none !important;
+        }
+        
+        /* Force comments container max width on desktop */
+        .comments-container {
+          max-width: 640px !important;
+        }
+        
+        /* More specific selector to override any inline styles */
+        div.comments-container {
+          max-width: 640px !important;
+        }
+        
+        /* Constrain the outer container that holds both game-page-container and comments */
+        div[style*="alignItems: 'center'"] {
+          max-width: 640px !important;
+        }
+        
+        /* Fix width overflow issues in comments */
+        .comments-container {
+          overflow-x: hidden !important;
+          box-sizing: border-box !important;
+        }
+        
+        .comments-container * {
+          max-width: 100% !important;
+          word-wrap: break-word !important;
+          overflow-wrap: break-word !important;
+          box-sizing: border-box !important;
+        }
+        
+        .comments-container img {
+          max-width: 100% !important;
+          height: auto !important;
+        }
+        
+        .comments-container pre,
+        .comments-container code {
+          max-width: 100% !important;
+          overflow-x: auto !important;
+          word-wrap: break-word !important;
+        }
+        
+        .comments-container textarea,
+        .comments-container input,
+        .comments-container button {
+          max-width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        
+        .comments-container .comment-actions {
+          flex-wrap: wrap !important;
+          max-width: 100% !important;
+        }
+        
+        /* Fix MarkdownGuide component width expansion */
+        .comments-container div[style*="minWidth: '300px'"] {
+          min-width: auto !important;
+          max-width: 100% !important;
+        }
+        
+        /* Fix any popover or dropdown elements */
+        .comments-container div[style*="position: absolute"] {
+          max-width: 100% !important;
+          overflow-x: hidden !important;
+        }
+        .desktop-text {
+          display: inline;
+        }
+        .mobile-text {
+          display: none;
+        }
+        .hours-text {
+          display: inline;
+        }
+        .desktop-count-text {
+          display: inline;
+        }
+
+        /* Desktop styles - ensure mobile stats are hidden and reduce max width */
+        @media (min-width: 769px) {
+          .mobile-stats {
+            display: none !important;
+          }
+          
+          .game-page-container {
+            max-width: 640px !important;
+          }
+          
+          .comments-container {
+            max-width: 640px !important;
+          }
+          
+          div.comments-container {
+            max-width: 640px !important;
+          }
+          
+          /* More specific selector for comments container */
+          div[class*="comments-container"] {
+            max-width: 640px !important;
+          }
+        }
+        
+        /* Fallback for larger screens */
+        @media (min-width: 1024px) {
+          .comments-container {
+            max-width: 640px !important;
+          }
+          
+          div.comments-container {
+            max-width: 640px !important;
+          }
+        }
+
+        /* Mobile styles */
+        @media (max-width: 768px) {
+          .game-page-container {
+            padding-left: 8px;
+            padding-right: 8px;
+          }
+          
+          .comments-container {
+            margin-left: 8px;
+            margin-right: 8px;
+          }
+          
+          /* Hide desktop text and show mobile text on mobile */
+          .desktop-text {
+            display: none !important;
+          }
+          .mobile-text {
+            display: inline !important;
+          }
+          
+          /* Hide hours text on mobile to save space */
+          .hours-text {
+            display: none !important;
+          }
+          
+          /* Hide desktop count text on mobile */
+          .desktop-count-text {
+            display: none !important;
+          }
+          
+          /* Show mobile stats */
+          .mobile-stats {
+            display: flex !important;
+          }
+        }
+
         /* Comment actions responsive layout */
         @media (max-width: 768px) {
           .comment-actions {
@@ -2832,6 +3234,147 @@ export default function GamesPage({ gameData, error }) {
           
           .comment-actions button {
             width: 100%;
+          }
+        }
+
+        /* Hide scrollbar for breadcrumb container */
+        #breadcrumb-container::-webkit-scrollbar {
+          display: none;
+        }
+        
+        #breadcrumb-container {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+
+        /* Desktop: show normal breadcrumbs, hide marquee */
+        .desktop-breadcrumb {
+          display: flex !important;
+          padding: 0 12px;
+        }
+        
+        .mobile-breadcrumb {
+          display: none !important;
+        }
+
+        /* Mobile: hide normal breadcrumbs, show marquee */
+        @media (max-width: 768px) {
+          .desktop-breadcrumb {
+            display: none !important;
+          }
+          
+          .mobile-breadcrumb {
+            display: inline-block !important;
+          }
+          
+          .comments-container {
+            width: calc(100% - 16px) !important;
+          }
+
+          /* Mobile game started state - set black background */
+          .mobile-game-started {
+            background: #000 !important;
+          }
+
+          /* Also hide the comic background when game is started */
+          .mobile-game-started > div:first-child {
+            display: none !important;
+          }
+
+          /* Mobile Arcade Controls */
+          .mobile-arcade-controls {
+            display: none;
+          }
+        }
+
+        /* Show arcade controls only on mobile when game is started */
+        @media (max-width: 768px) {
+          .mobile-arcade-controls {
+            display: block !important;
+            position: relative;
+            margin: 20px auto;
+            width: 200px;
+            height: 200px;
+            z-index: 1000;
+            pointer-events: none;
+          }
+
+          .arcade-button {
+            pointer-events: auto;
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            background: linear-gradient(145deg, #ff6b6b, #ee5a5a);
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            box-shadow: 
+              0 4px 8px rgba(0, 0, 0, 0.3),
+              inset 0 2px 4px rgba(255, 255, 255, 0.3),
+              inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+            transition: all 0.1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+          }
+
+          .arcade-button:active {
+            box-shadow: 
+              0 2px 4px rgba(0, 0, 0, 0.3),
+              inset 0 3px 6px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(145deg, #ee5a5a, #dd4949);
+          }
+
+          /* Position each button */
+          .arcade-w {
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(145deg, #51cf66, #40c057);
+          }
+
+          .arcade-w:active {
+            background: linear-gradient(145deg, #40c057, #37b24d);
+          }
+
+          .arcade-a {
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            background: linear-gradient(145deg, #4dabf7, #339af0);
+          }
+
+          .arcade-a:active {
+            background: linear-gradient(145deg, #339af0, #228be6);
+          }
+
+          .arcade-s {
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(145deg, #ffd43b, #fcc419);
+          }
+
+          .arcade-s:active {
+            background: linear-gradient(145deg, #fcc419, #fab005);
+          }
+
+          .arcade-d {
+            top: 50%;
+            right: 0;
+            transform: translateY(-50%);
+            background: linear-gradient(145deg, #ff6b6b, #fa5252);
+          }
+
+          .arcade-d:active {
+            background: linear-gradient(145deg, #fa5252, #f03e3e);
           }
         }
       `}</style>
