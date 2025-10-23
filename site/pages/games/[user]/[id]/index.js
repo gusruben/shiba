@@ -275,19 +275,17 @@ function CommitGraph({ gameData, setSelectedView, setExpandedDevlogs, animatedDe
         <span>More</span>
       </div>
       
-        {/* Mobile stats - positioned relative to entire commit graph container */}
+        {/* Mobile stats - positioned inline on mobile */}
         {screenWidth <= 768 && (
           <div className="mobile-stats" style={{
-            position: 'absolute',
-            top: '50%',
-            right: '16px',
-            transform: 'translateY(-50%)',
+            display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '4px',
             fontSize: '12px',
-            color: '#666'
+            color: '#666',
+            marginTop: '16px'
           }}>
             <div>• {animatedDevHours.toFixed(0)} Hours Spent Dev</div>
             <div>• {animatedArtHours.toFixed(0)} Hours Spent Art</div>
@@ -3327,9 +3325,12 @@ export default function GamesPage({ gameData, error }) {
             display: none !important;
           }
           
-          /* Show mobile stats */
+          /* Show mobile stats inline */
           .mobile-stats {
             display: flex !important;
+            position: static !important;
+            transform: none !important;
+            margin-top: 16px !important;
           }
         }
 
