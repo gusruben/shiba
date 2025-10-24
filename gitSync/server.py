@@ -169,11 +169,6 @@ def perform_full_sync():
         # Clean up zombies before processing each repository
         cleanup_git_processes()
         
-        # Additional cleanup every 5 repositories
-        if i % 5 == 0:
-            print(f"  Periodic zombie cleanup at repo {i}...")
-            ultra_aggressive_cleanup()
-        
         try:
             # Analyze repo and get git changes
             repo['posts'] = analyze_repo_for_posts(repo['github_url'], repo['posts'])
@@ -187,8 +182,8 @@ def perform_full_sync():
             
             repos_processed += 1
             
-            # Clean up zombies after each repository to prevent accumulation
-            print(f"  Cleaning up zombies after repo {i}...")
+            # Ultra aggressive cleanup after each repository to prevent accumulation
+            print(f"  Ultra aggressive cleanup after repo {i}...")
             ultra_aggressive_cleanup()
             
         except Exception as e:
