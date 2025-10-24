@@ -65,6 +65,122 @@ def cleanup_git_processes():
         print(f"  Warning: Could not cleanup processes: {e}")
 
 
+def aggressive_cleanup_git_processes():
+    """Aggressively clean up ALL git processes to prevent zombie accumulation."""
+    try:
+        zombies_cleaned = 0
+        git_procs_cleaned = 0
+        
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'status']):
+            try:
+                proc_info = proc.info
+                
+                # Clean up zombie processes
+                if proc_info['status'] == psutil.STATUS_ZOMBIE:
+                    zombies_cleaned += 1
+                    print(f"  Found zombie process: PID {proc_info['pid']} ({proc_info['name']})")
+                
+                # Aggressively clean up ALL git processes
+                elif proc_info['name'] == 'git':
+                    print(f"  Killing git process: {proc_info['pid']}")
+                    try:
+                        proc.terminate()
+                        proc.wait(timeout=2)
+                        git_procs_cleaned += 1
+                    except psutil.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=1)
+                        git_procs_cleaned += 1
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                            
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                pass
+        
+        if zombies_cleaned > 0:
+            print(f"  Found {zombies_cleaned} zombie processes")
+        if git_procs_cleaned > 0:
+            print(f"  Killed {git_procs_cleaned} git processes")
+        if zombies_cleaned == 0 and git_procs_cleaned == 0:
+            print("  No git processes to clean up")
+            
+    except Exception as e:
+        print(f"  Warning: Could not aggressively cleanup processes: {e}")
+
+
+def nuclear_cleanup_git_processes():
+    """NUCLEAR OPTION: Kill ALL git processes and use system commands for total reset."""
+    try:
+        print("  🚨 NUCLEAR CLEANUP: Total git process reset...")
+        
+        # Use system commands to kill all git processes
+        import subprocess
+        
+        # Kill all git processes with pkill
+        try:
+            result = subprocess.run(['pkill', '-f', 'git'], capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                print("  Killed all git processes with pkill")
+        except:
+            pass
+        
+        # Also try killall
+        try:
+            result = subprocess.run(['killall', 'git'], capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                print("  Killed all git processes with killall")
+        except:
+            pass
+        
+        # Force kill any remaining git processes
+        try:
+            result = subprocess.run(['pkill', '-9', '-f', 'git'], capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                print("  Force killed remaining git processes")
+        except:
+            pass
+        
+        # Wait a moment for processes to die
+        time.sleep(2)
+        
+        # Now use psutil to clean up any remaining processes
+        zombies_cleaned = 0
+        git_procs_cleaned = 0
+        
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'status']):
+            try:
+                proc_info = proc.info
+                
+                # Clean up zombie processes
+                if proc_info['status'] == psutil.STATUS_ZOMBIE:
+                    zombies_cleaned += 1
+                    print(f"  Found zombie process: PID {proc_info['pid']} ({proc_info['name']})")
+                
+                # Kill any remaining git processes
+                elif proc_info['name'] == 'git':
+                    print(f"  Force killing remaining git process: {proc_info['pid']}")
+                    try:
+                        proc.kill()
+                        proc.wait(timeout=1)
+                        git_procs_cleaned += 1
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                        pass
+                            
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                pass
+        
+        print(f"  🚨 NUCLEAR CLEANUP COMPLETE: {zombies_cleaned} zombies, {git_procs_cleaned} git processes killed")
+        
+        # Final system cleanup
+        try:
+            subprocess.run(['sync'], timeout=5)  # Force sync to disk
+        except:
+            pass
+            
+    except Exception as e:
+        print(f"  🚨 NUCLEAR CLEANUP ERROR: {e}")
+
+
 def airtable_request(path: str, method: str = 'GET', params: Dict = None) -> Dict[str, Any]:
     """Make a request to the Airtable API."""
     url = f"{AIRTABLE_API_BASE}/{AIRTABLE_BASE_ID}/{path}"
@@ -133,6 +249,9 @@ def clone_repo(github_url: str, clone_dir: str) -> bool:
         stdout, stderr = proc.communicate(timeout=300)  # 5 minute timeout
         proc.wait()  # Ensure we reap the zombie
         
+        # Immediate cleanup after git operation
+        cleanup_git_processes()
+        
         if proc.returncode != 0:
             print(f"  Error cloning repository: {stderr}")
             return False
@@ -173,6 +292,9 @@ def get_commits_in_timerange(repo_dir: str, start_time: str = None, end_time: st
         )
         stdout, stderr = proc.communicate(timeout=120)  # 2 minute timeout
         proc.wait()  # Ensure we reap the zombie
+        
+        # Immediate cleanup after git operation
+        cleanup_git_processes()
         
         commits = []
         for line in stdout.strip().split('\n'):
@@ -217,6 +339,9 @@ def get_commit_changes(repo_dir: str, commit_hash: str, github_url: str) -> List
         )
         stdout, stderr = proc.communicate(timeout=60)  # 1 minute timeout
         proc.wait()  # Ensure we reap the zombie
+        
+        # Immediate cleanup after git operation
+        cleanup_git_processes()
         
         # Parse the GitHub URL to get owner/repo
         # Format: https://github.com/owner/repo or https://github.com/owner/repo.git
@@ -284,8 +409,8 @@ def analyze_repo_for_posts(github_url: str, posts: List[Dict[str, Any]]) -> List
         for i, post in enumerate(posts):
             print(f"  Processing post {i+1}/{len(posts)}: {post['post_id']}")
             
-            # Clean up zombies every 10 posts to prevent accumulation
-            if i % 10 == 0 and i > 0:
+            # Clean up zombies every 5 posts to prevent accumulation
+            if i % 5 == 0 and i > 0:
                 cleanup_git_processes()
             
             # Determine time range
