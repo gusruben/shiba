@@ -5,6 +5,7 @@ import signal
 import sys
 import atexit
 import psutil
+import json
 from datetime import datetime
 from flask import Flask, jsonify
 from dotenv import load_dotenv
@@ -31,6 +32,45 @@ last_sync_time = None
 last_sync_result = None
 sync_error = None
 sync_count = 0
+
+# State for per-repo processing
+current_repo_index = 0
+all_repos = []
+repos_processed = 0
+STATE_FILE = 'gitSync_state.json'
+
+
+def save_state():
+    """Save current state to file."""
+    try:
+        state = {
+            'current_repo_index': current_repo_index,
+            'repos_processed': repos_processed,
+            'all_repos': all_repos
+        }
+        with open(STATE_FILE, 'w') as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save state: {e}")
+
+
+def load_state():
+    """Load state from file."""
+    global current_repo_index, all_repos, repos_processed
+    
+    try:
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, 'r') as f:
+                state = json.load(f)
+                current_repo_index = state.get('current_repo_index', 0)
+                repos_processed = state.get('repos_processed', 0)
+                all_repos = state.get('all_repos', [])
+                print(f"Loaded state: repo {current_repo_index}/{len(all_repos)}, processed {repos_processed}")
+    except Exception as e:
+        print(f"Warning: Could not load state: {e}")
+        current_repo_index = 0
+        all_repos = []
+        repos_processed = 0
 
 
 def cleanup_all_zombies():
@@ -153,8 +193,106 @@ def perform_full_sync():
     return result
 
 
-def run_single_sync_and_restart():
-    """Run a single sync cycle and then restart the server."""
+def perform_single_repo_sync():
+    """Perform a sync for a single repository."""
+    global current_repo_index, all_repos, repos_processed
+    
+    # Load state from file
+    load_state()
+    
+    # If we don't have repos loaded yet, fetch them
+    if not all_repos:
+        print("Loading repository list...")
+        posts = fetch_all_posts()
+        print(f"Total posts fetched: {len(posts)}")
+        
+        if len(posts) == 0:
+            return {
+                'success': True,
+                'message': 'No posts to process',
+                'total_posts': 0,
+                'repos_processed': 0,
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        # Group by GitHub URL
+        all_repos = group_posts_by_github_url(posts)
+        print(f"Grouped into {len(all_repos)} unique repositories")
+        current_repo_index = 0
+        save_state()  # Save initial state
+    
+    # Check if we've processed all repos
+    if current_repo_index >= len(all_repos):
+        print("All repositories processed! Resetting for next cycle...")
+        current_repo_index = 0
+        all_repos = []
+        repos_processed = 0
+        # Clean up state file
+        try:
+            os.remove(STATE_FILE)
+        except:
+            pass
+        return {
+            'success': True,
+            'message': 'All repositories processed, cycle complete',
+            'total_repos': len(all_repos),
+            'repos_processed': repos_processed,
+            'timestamp': datetime.now().isoformat()
+        }
+    
+    # Get the current repository to process
+    repo = all_repos[current_repo_index]
+    current_repo_index += 1
+    
+    print(f"Processing repository {current_repo_index}/{len(all_repos)}: {repo['github_url']}")
+    print(f"  Posts: {len(repo['posts'])}")
+    
+    # Clean up any hanging git processes before starting
+    cleanup_git_processes()
+    
+    try:
+        # Analyze repo and get git changes
+        repo['posts'] = analyze_repo_for_posts(repo['github_url'], repo['posts'])
+        
+        posts_updated = 0
+        # Update Airtable with git changes
+        for post in repo['posts']:
+            if post.get('git_changes'):
+                print(f"  Updating Airtable for post {post['post_id']}...")
+                if update_post_git_changes(post['record_id'], post['git_changes']):
+                    posts_updated += 1
+        
+        repos_processed += 1
+        
+        # Save state after processing
+        save_state()
+        
+        result = {
+            'success': True,
+            'repo_url': repo['github_url'],
+            'posts_processed': len(repo['posts']),
+            'posts_updated': posts_updated,
+            'repos_processed': repos_processed,
+            'total_repos': len(all_repos),
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        print(f"  Repository processed successfully: {posts_updated} posts updated")
+        
+        # Clean up any hanging git processes after processing
+        cleanup_all_zombies()
+        
+        return result
+        
+    except Exception as e:
+        print(f"  Error processing repo: {e}")
+        # Still clean up even on error
+        cleanup_all_zombies()
+        raise
+
+
+def run_single_repo_sync_and_restart():
+    """Run a single repository sync and then restart the server."""
     global is_sync_running, last_sync_time, last_sync_result, sync_error, sync_count
     
     is_sync_running = True
@@ -162,24 +300,24 @@ def run_single_sync_and_restart():
     
     try:
         print(f"\n{'='*80}")
-        print(f"Starting sync #{sync_count} at {datetime.now().isoformat()}")
+        print(f"Starting repo sync #{sync_count} at {datetime.now().isoformat()}")
         print(f"{'='*80}\n")
         
-        result = perform_full_sync()
+        result = perform_single_repo_sync()
         last_sync_result = result
         last_sync_time = datetime.now()
         sync_error = None
         
         print(f"\n{'='*80}")
-        print(f"Sync #{sync_count} completed successfully!")
-        print(f"Waiting 60 seconds before restart to prevent zombie accumulation...")
+        print(f"Repo sync #{sync_count} completed successfully!")
+        print(f"Restarting immediately to prevent zombie accumulation...")
         print(f"{'='*80}\n")
         
         # Clean up before restart
         cleanup_all_zombies()
         
-        # Wait before restart to prevent rapid cycling
-        time.sleep(60)
+        # Short wait to ensure cleanup completes
+        time.sleep(2)
         
         print(f"Restarting server...")
         # Restart the server
@@ -187,14 +325,14 @@ def run_single_sync_and_restart():
         
     except Exception as error:
         sync_error = str(error)
-        print(f"❌ Sync #{sync_count} failed: {error}")
-        print(f"Waiting 30 seconds before restart to prevent zombie accumulation...")
+        print(f"❌ Repo sync #{sync_count} failed: {error}")
+        print(f"Restarting to prevent zombie accumulation...")
         
         # Clean up before restart even on error
         cleanup_all_zombies()
         
-        # Wait before restart to prevent rapid cycling
-        time.sleep(30)
+        # Short wait to ensure cleanup completes
+        time.sleep(2)
         
         print(f"Restarting server...")
         # Restart the server
@@ -223,6 +361,9 @@ def sync_status():
         'last_sync_result': last_sync_result,
         'last_error': sync_error,
         'sync_count': sync_count,
+        'current_repo_index': current_repo_index,
+        'total_repos': len(all_repos),
+        'repos_processed': repos_processed,
         'timestamp': datetime.now().isoformat()
     })
 
@@ -276,12 +417,12 @@ if __name__ == '__main__':
     # Register cleanup on exit
     atexit.register(cleanup_all_zombies)
     
-    # Start single sync cycle in background thread (will restart after completion)
-    sync_thread = threading.Thread(target=run_single_sync_and_restart, daemon=True)
+    # Start single repo sync cycle in background thread (will restart after each repo)
+    sync_thread = threading.Thread(target=run_single_repo_sync_and_restart, daemon=True)
     sync_thread.start()
     
     print(f"Starting gitSync server on port {PORT}")
-    print(f"Single sync cycle enabled (will restart after completion)")
+    print(f"Per-repo sync enabled (will restart after each repository)")
     print(f"Signal handlers registered for graceful shutdown")
     
     # Initial cleanup
