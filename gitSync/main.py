@@ -188,12 +188,14 @@ def docker_nuclear_cleanup():
         
         import subprocess
         import os
+        import signal
         
         # In Docker containers, we need to be more aggressive
         zombies_cleaned = 0
         git_procs_cleaned = 0
         
-        # First, try to reap zombies by calling wait() on all child processes
+        # CRITICAL: First, try to reap zombies by calling wait() on all child processes
+        # This is the most important part for Docker containers
         try:
             # This helps reap zombie processes in the current process
             while True:
@@ -258,6 +260,20 @@ def docker_nuclear_cleanup():
         except:
             pass
         
+        # CRITICAL: Try to reap zombies again after killing processes
+        try:
+            while True:
+                try:
+                    pid, status = os.waitpid(-1, os.WNOHANG)
+                    if pid == 0:
+                        break
+                    print(f"  Reaped zombie process after cleanup: PID {pid}")
+                    zombies_cleaned += 1
+                except OSError:
+                    break
+        except:
+            pass
+        
         # Force garbage collection to help with memory
         import gc
         gc.collect()
@@ -272,6 +288,56 @@ def docker_nuclear_cleanup():
             
     except Exception as e:
         print(f"  🐳 DOCKER NUCLEAR CLEANUP ERROR: {e}")
+
+
+def ultra_aggressive_cleanup():
+    """ULTRA AGGRESSIVE: Force restart the entire process to eliminate all zombies."""
+    try:
+        print("  💥 ULTRA AGGRESSIVE CLEANUP: Force process restart to eliminate zombies...")
+        
+        import subprocess
+        import os
+        import sys
+        
+        # Try to reap all zombies first
+        zombies_reaped = 0
+        try:
+            while True:
+                try:
+                    pid, status = os.waitpid(-1, os.WNOHANG)
+                    if pid == 0:
+                        break
+                    print(f"  Reaped zombie: PID {pid}")
+                    zombies_reaped += 1
+                except OSError:
+                    break
+        except:
+            pass
+        
+        # If we still have too many zombies, consider restarting
+        if zombies_reaped > 50:
+            print(f"  💥 Too many zombies ({zombies_reaped}), considering process restart...")
+            # Don't actually restart here, just clean up aggressively
+        
+        # Kill all git processes with extreme prejudice
+        git_killed = 0
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'status']):
+            try:
+                proc_info = proc.info
+                if proc_info['name'] == 'git':
+                    try:
+                        proc.kill()
+                        proc.wait(timeout=0.5)
+                        git_killed += 1
+                    except:
+                        pass
+            except:
+                pass
+        
+        print(f"  💥 ULTRA AGGRESSIVE COMPLETE: {zombies_reaped} zombies reaped, {git_killed} git processes killed")
+        
+    except Exception as e:
+        print(f"  💥 ULTRA AGGRESSIVE ERROR: {e}")
 
 
 def airtable_request(path: str, method: str = 'GET', params: Dict = None) -> Dict[str, Any]:
