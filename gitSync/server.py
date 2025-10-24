@@ -331,8 +331,122 @@ def perform_single_repo_sync():
         raise
 
 
-def run_single_repo_sync_and_restart():
-    """Run a single repository sync and then restart the server."""
+def perform_batch_sync():
+    """Perform a sync for a batch of repositories (5 repos at a time)."""
+    global current_repo_index, all_repos, repos_processed
+    
+    # Load state from file
+    load_state()
+    
+    # If we don't have repos loaded yet, fetch them
+    if not all_repos:
+        print("Loading repository list...")
+        posts = fetch_all_posts()
+        print(f"Total posts fetched: {len(posts)}")
+        
+        if len(posts) == 0:
+            return {
+                'success': True,
+                'message': 'No posts to process',
+                'total_posts': 0,
+                'repos_processed': 0,
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        # Group by GitHub URL
+        all_repos = group_posts_by_github_url(posts)
+        print(f"Grouped into {len(all_repos)} unique repositories")
+        current_repo_index = 0
+        save_state()  # Save initial state
+    
+    # Check if we've processed all repos
+    if current_repo_index >= len(all_repos):
+        print("All repositories processed! Resetting for next cycle...")
+        current_repo_index = 0
+        all_repos = []
+        repos_processed = 0
+        # Clean up state file
+        try:
+            os.remove(STATE_FILE)
+        except:
+            pass
+        return {
+            'success': True,
+            'message': 'All repositories processed, cycle complete',
+            'total_repos': len(all_repos),
+            'repos_processed': repos_processed,
+            'timestamp': datetime.now().isoformat()
+        }
+    
+    # Process up to 5 repositories in this batch
+    batch_size = 5
+    batch_repos = all_repos[current_repo_index:current_repo_index + batch_size]
+    batch_processed = 0
+    total_posts_updated = 0
+    
+    print(f"Processing batch of {len(batch_repos)} repositories (repos {current_repo_index + 1}-{current_repo_index + len(batch_repos)} of {len(all_repos)})")
+    
+    # Clean up any hanging git processes before starting
+    cleanup_git_processes()
+    
+    for i, repo in enumerate(batch_repos):
+        try:
+            print(f"\nRepository {current_repo_index + i + 1}/{len(all_repos)}: {repo['github_url']}")
+            print(f"  Posts: {len(repo['posts'])}")
+            
+            # Analyze repo and get git changes
+            repo['posts'] = analyze_repo_for_posts(repo['github_url'], repo['posts'])
+            
+            posts_updated = 0
+            # Update Airtable with git changes
+            for post in repo['posts']:
+                if post.get('git_changes'):
+                    print(f"  Updating Airtable for post {post['post_id']}...")
+                    if update_post_git_changes(post['record_id'], post['git_changes']):
+                        posts_updated += 1
+            
+            total_posts_updated += posts_updated
+            batch_processed += 1
+            current_repo_index += 1
+            
+            print(f"  Repository processed successfully: {posts_updated} posts updated")
+            
+            # Clean up after each repo to prevent zombie accumulation
+            cleanup_all_zombies()
+            
+        except Exception as e:
+            print(f"  Error processing repo: {e}")
+            # Still increment index and clean up even on error
+            current_repo_index += 1
+            cleanup_all_zombies()
+            continue
+    
+    repos_processed += batch_processed
+    
+    # Save state after processing batch
+    save_state()
+    
+    result = {
+        'success': True,
+        'batch_size': len(batch_repos),
+        'repos_processed': batch_processed,
+        'posts_updated': total_posts_updated,
+        'total_repos_processed': repos_processed,
+        'remaining_repos': len(all_repos) - current_repo_index,
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    print(f"\nBatch completed: {batch_processed} repos processed, {total_posts_updated} posts updated")
+    print(f"Total progress: {repos_processed}/{len(all_repos)} repositories processed")
+    
+    # Final cleanup
+    cleanup_all_zombies()
+    
+    return result
+
+
+def run_batch_sync_and_restart():
+    """Run a batch of repository syncs and then restart the server."""
     global is_sync_running, last_sync_time, last_sync_result, sync_error, sync_count
     
     is_sync_running = True
@@ -340,24 +454,24 @@ def run_single_repo_sync_and_restart():
     
     try:
         print(f"\n{'='*80}")
-        print(f"Starting repo sync #{sync_count} at {datetime.now().isoformat()}")
+        print(f"Starting batch sync #{sync_count} at {datetime.now().isoformat()}")
         print(f"{'='*80}\n")
         
-        result = perform_single_repo_sync()
+        result = perform_batch_sync()
         last_sync_result = result
         last_sync_time = datetime.now()
         sync_error = None
         
         print(f"\n{'='*80}")
-        print(f"Repo sync #{sync_count} completed successfully!")
-        print(f"Restarting immediately to prevent zombie accumulation...")
+        print(f"Batch sync #{sync_count} completed successfully!")
+        print(f"Restarting to prevent zombie accumulation...")
         print(f"{'='*80}\n")
         
         # Clean up before restart
         cleanup_all_zombies()
         
-        # Wait to ensure cleanup completes and prevent rapid cycling
-        time.sleep(5)
+        # Wait to ensure cleanup completes
+        time.sleep(10)
         
         print(f"Restarting server...")
         # Restart the server
@@ -365,14 +479,14 @@ def run_single_repo_sync_and_restart():
         
     except Exception as error:
         sync_error = str(error)
-        print(f"❌ Repo sync #{sync_count} failed: {error}")
+        print(f"❌ Batch sync #{sync_count} failed: {error}")
         print(f"Restarting to prevent zombie accumulation...")
         
         # Clean up before restart even on error
         cleanup_all_zombies()
         
-        # Wait to ensure cleanup completes and prevent rapid cycling
-        time.sleep(5)
+        # Wait to ensure cleanup completes
+        time.sleep(10)
         
         print(f"Restarting server...")
         # Restart the server
@@ -465,7 +579,7 @@ if __name__ == '__main__':
     save_pid()
     
     print(f"Starting gitSync server on port {PORT}")
-    print(f"Per-repo sync enabled (will restart after each repository)")
+    print(f"Batch sync enabled (will restart after each batch of 5 repositories)")
     print(f"Signal handlers registered for graceful shutdown")
     
     # Initial cleanup
@@ -479,9 +593,9 @@ if __name__ == '__main__':
     # Wait a moment for Flask to start
     time.sleep(3)
     
-    # Start single repo sync cycle in background thread (will restart after each repo)
+    # Start batch sync cycle in background thread (will restart after each batch)
     print("Starting sync thread...")
-    sync_thread = threading.Thread(target=run_single_repo_sync_and_restart, daemon=True)
+    sync_thread = threading.Thread(target=run_batch_sync_and_restart, daemon=True)
     sync_thread.start()
     
     # Keep main thread alive
