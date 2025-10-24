@@ -162,6 +162,14 @@ def perform_full_sync():
         print(f"Repository {i}/{len(grouped_data)}: {repo['github_url']}")
         print(f"  Posts: {len(repo['posts'])}")
         
+        # Clean up zombies before processing each repository
+        cleanup_git_processes()
+        
+        # Additional cleanup every 10 repositories
+        if i % 10 == 0:
+            print(f"  Periodic zombie cleanup at repo {i}...")
+            cleanup_all_zombies()
+        
         try:
             # Analyze repo and get git changes
             repo['posts'] = analyze_repo_for_posts(repo['github_url'], repo['posts'])
@@ -175,8 +183,14 @@ def perform_full_sync():
             
             repos_processed += 1
             
+            # Clean up zombies after each repository to prevent accumulation
+            print(f"  Cleaning up zombies after repo {i}...")
+            cleanup_all_zombies()
+            
         except Exception as e:
             print(f"  Error processing repo: {e}")
+            # Still clean up zombies even on error
+            cleanup_all_zombies()
             continue
     
     result = {

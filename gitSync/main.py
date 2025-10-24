@@ -284,6 +284,10 @@ def analyze_repo_for_posts(github_url: str, posts: List[Dict[str, Any]]) -> List
         for i, post in enumerate(posts):
             print(f"  Processing post {i+1}/{len(posts)}: {post['post_id']}")
             
+            # Clean up zombies every 10 posts to prevent accumulation
+            if i % 10 == 0 and i > 0:
+                cleanup_git_processes()
+            
             # Determine time range
             end_time = post['created_at']
             start_time = posts[i-1]['created_at'] if i > 0 else None
