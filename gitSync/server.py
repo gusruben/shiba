@@ -19,6 +19,7 @@ from main import (
     cleanup_git_processes,
     aggressive_cleanup_git_processes,
     nuclear_cleanup_git_processes,
+    docker_nuclear_cleanup,
     AIRTABLE_API_KEY,
     AIRTABLE_BASE_ID
 )
@@ -170,7 +171,7 @@ def perform_full_sync():
         # Additional cleanup every 5 repositories
         if i % 5 == 0:
             print(f"  Periodic zombie cleanup at repo {i}...")
-            nuclear_cleanup_git_processes()
+            docker_nuclear_cleanup()
         
         try:
             # Analyze repo and get git changes
@@ -187,12 +188,12 @@ def perform_full_sync():
             
             # Clean up zombies after each repository to prevent accumulation
             print(f"  Cleaning up zombies after repo {i}...")
-            nuclear_cleanup_git_processes()
+            docker_nuclear_cleanup()
             
         except Exception as e:
             print(f"  Error processing repo: {e}")
             # Still clean up zombies even on error
-            nuclear_cleanup_git_processes()
+            docker_nuclear_cleanup()
             continue
     
     result = {
@@ -208,8 +209,8 @@ def perform_full_sync():
     print(f"{'='*80}\n")
     
     # Clean up any hanging git processes after sync
-    print("  Final nuclear cleanup after full sync...")
-    nuclear_cleanup_git_processes()
+    print("  Final Docker nuclear cleanup after full sync...")
+    docker_nuclear_cleanup()
     
     return result
 

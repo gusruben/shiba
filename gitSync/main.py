@@ -181,6 +181,99 @@ def nuclear_cleanup_git_processes():
         print(f"  🚨 NUCLEAR CLEANUP ERROR: {e}")
 
 
+def docker_nuclear_cleanup():
+    """DOCKER-SPECIFIC NUCLEAR CLEANUP: Optimized for containerized environments."""
+    try:
+        print("  🐳 DOCKER NUCLEAR CLEANUP: Container-optimized git process reset...")
+        
+        import subprocess
+        import os
+        
+        # In Docker containers, we need to be more aggressive
+        zombies_cleaned = 0
+        git_procs_cleaned = 0
+        
+        # First, try to reap zombies by calling wait() on all child processes
+        try:
+            # This helps reap zombie processes in the current process
+            while True:
+                try:
+                    pid, status = os.waitpid(-1, os.WNOHANG)
+                    if pid == 0:
+                        break
+                    print(f"  Reaped zombie process: PID {pid}")
+                    zombies_cleaned += 1
+                except OSError:
+                    break
+        except:
+            pass
+        
+        # Now aggressively kill all git processes
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'status']):
+            try:
+                proc_info = proc.info
+                
+                # Clean up zombie processes
+                if proc_info['status'] == psutil.STATUS_ZOMBIE:
+                    zombies_cleaned += 1
+                    print(f"  Found zombie process: PID {proc_info['pid']} ({proc_info['name']})")
+                
+                # Kill ALL git processes aggressively
+                elif proc_info['name'] == 'git':
+                    print(f"  🐳 Force killing git process: {proc_info['pid']}")
+                    try:
+                        # Try SIGTERM first
+                        proc.terminate()
+                        proc.wait(timeout=1)
+                        git_procs_cleaned += 1
+                    except psutil.TimeoutExpired:
+                        # Force kill with SIGKILL
+                        proc.kill()
+                        proc.wait(timeout=1)
+                        git_procs_cleaned += 1
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                            
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                pass
+        
+        # Try system commands that work in containers
+        try:
+            # Use ps and kill combination
+            result = subprocess.run(['ps', 'aux'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                for line in lines:
+                    if 'git' in line and 'python' not in line:  # Don't kill our own process
+                        parts = line.split()
+                        if len(parts) > 1:
+                            try:
+                                pid = int(parts[1])
+                                if pid != os.getpid():  # Don't kill ourselves
+                                    subprocess.run(['kill', '-9', str(pid)], timeout=2)
+                                    print(f"  🐳 Killed git process via ps: {pid}")
+                                    git_procs_cleaned += 1
+                            except (ValueError, subprocess.TimeoutExpired):
+                                pass
+        except:
+            pass
+        
+        # Force garbage collection to help with memory
+        import gc
+        gc.collect()
+        
+        print(f"  🐳 DOCKER NUCLEAR CLEANUP COMPLETE: {zombies_cleaned} zombies, {git_procs_cleaned} git processes killed")
+        
+        # Final container cleanup
+        try:
+            subprocess.run(['sync'], timeout=5)
+        except:
+            pass
+            
+    except Exception as e:
+        print(f"  🐳 DOCKER NUCLEAR CLEANUP ERROR: {e}")
+
+
 def airtable_request(path: str, method: str = 'GET', params: Dict = None) -> Dict[str, Any]:
     """Make a request to the Airtable API."""
     url = f"{AIRTABLE_API_BASE}/{AIRTABLE_BASE_ID}/{path}"
