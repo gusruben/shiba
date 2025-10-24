@@ -38,6 +38,7 @@ current_repo_index = 0
 all_repos = []
 repos_processed = 0
 STATE_FILE = 'gitSync_state.json'
+PID_FILE = 'gitSync.pid'
 
 
 def save_state():
@@ -71,6 +72,45 @@ def load_state():
         current_repo_index = 0
         all_repos = []
         repos_processed = 0
+
+
+def check_existing_process():
+    """Check if another instance is already running."""
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE, 'r') as f:
+                pid = int(f.read().strip())
+            
+            # Check if process is still running
+            try:
+                os.kill(pid, 0)  # This will raise an exception if process doesn't exist
+                print(f"Another gitSync instance is already running (PID: {pid})")
+                print("Exiting to prevent conflicts...")
+                sys.exit(1)
+            except (OSError, ProcessLookupError):
+                # Process doesn't exist, remove stale PID file
+                os.remove(PID_FILE)
+                print("Removed stale PID file")
+    except Exception as e:
+        print(f"Warning: Could not check existing process: {e}")
+
+
+def save_pid():
+    """Save current process ID."""
+    try:
+        with open(PID_FILE, 'w') as f:
+            f.write(str(os.getpid()))
+    except Exception as e:
+        print(f"Warning: Could not save PID: {e}")
+
+
+def cleanup_pid():
+    """Remove PID file on exit."""
+    try:
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
+    except Exception as e:
+        print(f"Warning: Could not remove PID file: {e}")
 
 
 def cleanup_all_zombies():
@@ -316,8 +356,8 @@ def run_single_repo_sync_and_restart():
         # Clean up before restart
         cleanup_all_zombies()
         
-        # Short wait to ensure cleanup completes
-        time.sleep(2)
+        # Wait to ensure cleanup completes and prevent rapid cycling
+        time.sleep(5)
         
         print(f"Restarting server...")
         # Restart the server
@@ -331,8 +371,8 @@ def run_single_repo_sync_and_restart():
         # Clean up before restart even on error
         cleanup_all_zombies()
         
-        # Short wait to ensure cleanup completes
-        time.sleep(2)
+        # Wait to ensure cleanup completes and prevent rapid cycling
+        time.sleep(5)
         
         print(f"Restarting server...")
         # Restart the server
@@ -405,6 +445,9 @@ def root():
 
 
 if __name__ == '__main__':
+    # Check for existing process
+    check_existing_process()
+    
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -416,10 +459,10 @@ if __name__ == '__main__':
     
     # Register cleanup on exit
     atexit.register(cleanup_all_zombies)
+    atexit.register(cleanup_pid)
     
-    # Start single repo sync cycle in background thread (will restart after each repo)
-    sync_thread = threading.Thread(target=run_single_repo_sync_and_restart, daemon=True)
-    sync_thread.start()
+    # Save current PID
+    save_pid()
     
     print(f"Starting gitSync server on port {PORT}")
     print(f"Per-repo sync enabled (will restart after each repository)")
@@ -428,8 +471,28 @@ if __name__ == '__main__':
     # Initial cleanup
     cleanup_all_zombies()
     
-    # Start Flask server
-    app.run(host='0.0.0.0', port=PORT)
+    # Start Flask server first
+    print("Starting Flask server...")
+    flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=PORT), daemon=True)
+    flask_thread.start()
+    
+    # Wait a moment for Flask to start
+    time.sleep(3)
+    
+    # Start single repo sync cycle in background thread (will restart after each repo)
+    print("Starting sync thread...")
+    sync_thread = threading.Thread(target=run_single_repo_sync_and_restart, daemon=True)
+    sync_thread.start()
+    
+    # Keep main thread alive
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+        cleanup_all_zombies()
+        cleanup_pid()
+        sys.exit(0)
 
 
 
