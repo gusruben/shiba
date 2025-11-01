@@ -103,7 +103,7 @@ export default function Home({ games: prefetchedGames, gamesError }) {
         router.replace("/", undefined, { shallow: true });
       }
       
-      if (arcade === "true") {
+      if (arcade === "true" || arcade === "") {
         setShowEventSite(true);
         // Clean up the URL without triggering a page reload
         router.replace("/", undefined, { shallow: true });
